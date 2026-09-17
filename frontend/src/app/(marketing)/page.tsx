@@ -87,99 +87,102 @@ function LiveTransferCard() {
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-foreground overflow-x-hidden">
-      {/* ── Navbar ──────────────────────────────────────────── */}
-      <header className="relative z-50 flex items-center justify-between max-w-6xl mx-auto px-6 py-5">
-        <Link href="/" className="flex items-center gap-2.5 cursor-pointer">
-          <div className="w-8 h-8 rounded-xl bg-pollar-blue flex items-center justify-center text-white font-extrabold shadow-blue">
-            P
-          </div>
-          <span className="text-lg font-extrabold tracking-tight text-foreground">Puente</span>
-        </Link>
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-muted">
-          <a href="#how-it-works" className="hover:text-foreground transition-colors cursor-pointer">How it Works</a>
-          <Link href="/proof" className="hover:text-foreground transition-colors cursor-pointer">Proof of Reserves</Link>
-        </nav>
-        <Link
-          href="/login"
-          className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-pollar-blue bg-pollar-blue/10 hover:bg-pollar-blue/20 border border-pollar-blue/20 px-4 py-2.5 rounded-xl transition-all cursor-pointer"
-        >
-          Sign In <FiChevronRight size={14} />
-        </Link>
-        {/* Mobile sign in only icon */}
-        <Link
-          href="/login"
-          className="flex sm:hidden items-center justify-center w-10 h-10 text-pollar-blue bg-pollar-blue/10 rounded-xl"
-        >
-          <FiChevronRight size={18} />
-        </Link>
-      </header>
+      {/* ── Dark Hero Wrapper ──────────────────────────────────────────── */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 text-white">
+        {/* Background glow blobs (matching login page) */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-pollar-blue/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="relative max-w-6xl mx-auto px-6 pt-12 md:pt-20 pb-20 md:pb-32 flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
-        {/* Background glows */}
-        <div className="absolute top-0 left-0 w-[400px] md:w-[600px] h-[400px] md:h-[600px] bg-pollar-blue/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/4 pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-64 md:w-96 h-64 md:h-96 bg-indigo-500/10 rounded-full blur-3xl translate-x-1/3 pointer-events-none" />
+        {/* ── Navbar ──────────────────────────────────────────── */}
+        <header className="relative z-50 flex items-center justify-between max-w-6xl mx-auto px-6 py-5">
+          <Link href="/" className="flex items-center gap-2.5 cursor-pointer">
+            <div className="w-8 h-8 rounded-xl bg-pollar-blue flex items-center justify-center text-white font-extrabold shadow-blue">
+              P
+            </div>
+            <span className="text-lg font-extrabold tracking-tight text-white">Puente</span>
+          </Link>
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-white/70">
+            <a href="#how-it-works" className="hover:text-white transition-colors cursor-pointer">How it Works</a>
+            <Link href="/proof" className="hover:text-white transition-colors cursor-pointer">Proof of Reserves</Link>
+          </nav>
+          <Link
+            href="/login"
+            className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-white bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded-xl transition-all cursor-pointer backdrop-blur-md"
+          >
+            Sign In <FiChevronRight size={14} />
+          </Link>
+          {/* Mobile sign in only icon */}
+          <Link
+            href="/login"
+            className="flex sm:hidden items-center justify-center w-10 h-10 text-white bg-white/10 border border-white/20 backdrop-blur-md rounded-xl"
+          >
+            <FiChevronRight size={18} />
+          </Link>
+        </header>
 
-        {/* Left — Copy */}
-        <div className="flex-1 relative z-10 animate-fade-slide-up text-center lg:text-left">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] mb-6">
-            Move money from<br className="hidden sm:block" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-pollar-blue via-blue-500 to-indigo-500">
-              {" "}Lagos to La Paz{" "}
-            </span>
-            <br className="hidden sm:block" />
-            in under 10 seconds.
-          </h1>
+        {/* ── Hero ─────────────────────────────────────────────── */}
+        <section className="relative max-w-6xl mx-auto px-6 pt-12 md:pt-20 pb-20 md:pb-32 flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+          {/* Left — Copy */}
+          <div className="flex-1 relative z-10 animate-fade-slide-up text-center lg:text-left">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] mb-6 text-white">
+              Move money from<br className="hidden sm:block" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-blue-400 to-indigo-400">
+                {" "}Lagos to La Paz{" "}
+              </span>
+              <br className="hidden sm:block" />
+              in under 10 seconds.
+            </h1>
 
-          <p className="text-muted text-base md:text-lg leading-relaxed mb-8 md:mb-10 max-w-lg mx-auto lg:mx-0">
-            Pay your local NGN agent in cash. Your Pollar wallet receives USDC instantly via Stellar escrow.
-            María in Bolivia gets Bolivianos to her bank account — zero wire fees.
-          </p>
+            <p className="text-white/70 text-base md:text-lg leading-relaxed mb-8 md:mb-10 max-w-lg mx-auto lg:mx-0">
+              Pay your local NGN agent in cash. Your Pollar wallet receives USDC instantly via Stellar escrow.
+              María in Bolivia gets Bolivianos to her bank account — zero wire fees.
+            </p>
 
-          {/* Stats row */}
-          <div className="flex flex-wrap justify-center lg:justify-start items-center gap-6 md:gap-8 mb-8 md:mb-10">
-            {[
-              { value: "< 10s", label: "settlement" },
-              { value: "0.00%", label: "network fee" },
-              { value: "1:1", label: "USDC backed" },
-            ].map((s) => (
-              <div key={s.label}>
-                <p className="text-xl md:text-2xl font-extrabold text-foreground">{s.value}</p>
-                <p className="text-[10px] md:text-xs text-muted uppercase tracking-wider">{s.label}</p>
-              </div>
-            ))}
-          </div>
+            {/* Stats row */}
+            <div className="flex flex-wrap justify-center lg:justify-start items-center gap-6 md:gap-8 mb-8 md:mb-10">
+              {[
+                { value: "< 10s", label: "settlement" },
+                { value: "0.00%", label: "network fee" },
+                { value: "1:1", label: "USDC backed" },
+              ].map((s) => (
+                <div key={s.label}>
+                  <p className="text-xl md:text-2xl font-extrabold text-white">{s.value}</p>
+                  <p className="text-[10px] md:text-xs text-white/50 uppercase tracking-wider">{s.label}</p>
+                </div>
+              ))}
+            </div>
 
-          <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-3">
-            <Link
-              href="/login"
-              className="flex items-center justify-center gap-2 px-7 py-4 bg-pollar-blue hover:bg-pollar-blue-hover active:scale-[0.98] text-white font-bold rounded-2xl shadow-blue hover:shadow-blue-lg transition-all cursor-pointer"
-            >
-              Start the Demo <FiArrowRight />
-            </Link>
-            <Link
-              href="/proof"
-              className="flex items-center justify-center gap-2 px-7 py-4 bg-white hover:bg-slate-50 text-foreground font-semibold rounded-2xl border border-surface-border shadow-sm transition-all cursor-pointer"
-            >
-              <FiShield size={16} /> Proof of Reserves
-            </Link>
-          </div>
-        </div>
-
-        {/* Right — Live card */}
-        <div className="w-full max-w-md lg:flex-shrink-0 relative z-10 animate-fade-slide-up mx-auto lg:mx-0 mt-8 lg:mt-0" style={{ animationDelay: "0.15s" }}>
-          <LiveTransferCard />
-
-          {/* Floating trust chip */}
-          <div className="hidden sm:flex absolute -bottom-5 -left-5 bg-slate-900 border border-white/10 rounded-2xl px-4 py-3 items-center gap-2.5 shadow-lg">
-            <SiStellar size={18} className="text-pollar-blue" />
-            <div>
-              <p className="text-xs font-bold text-white leading-none">Stellar Escrow</p>
-              <p className="text-xs text-white/40">Trustless · Atomic</p>
+            <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-3">
+              <Link
+                href="/login"
+                className="flex items-center justify-center gap-2 px-7 py-4 bg-pollar-blue hover:bg-pollar-blue-hover active:scale-[0.98] text-white font-bold rounded-2xl shadow-blue hover:shadow-blue-lg transition-all cursor-pointer"
+              >
+                Start the Demo <FiArrowRight />
+              </Link>
+              <Link
+                href="/proof"
+                className="flex items-center justify-center gap-2 px-7 py-4 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-2xl border border-white/20 shadow-sm transition-all cursor-pointer backdrop-blur-md"
+              >
+                <FiShield size={16} /> Proof of Reserves
+              </Link>
             </div>
           </div>
-        </div>
-      </section>
+
+          {/* Right — Live card */}
+          <div className="w-full max-w-md lg:flex-shrink-0 relative z-10 animate-fade-slide-up mx-auto lg:mx-0 mt-8 lg:mt-0" style={{ animationDelay: "0.15s" }}>
+            <LiveTransferCard />
+
+            {/* Floating trust chip */}
+            <div className="hidden sm:flex absolute -bottom-5 -left-5 bg-slate-900 border border-white/20 rounded-2xl px-4 py-3 items-center gap-2.5 shadow-xl backdrop-blur-md">
+              <SiStellar size={18} className="text-pollar-blue" />
+              <div>
+                <p className="text-xs font-bold text-white leading-none">Stellar Escrow</p>
+                <p className="text-xs text-white/40">Trustless · Atomic</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
 
       {/* ── How it works ─────────────────────────────────────── */}
       <section id="how-it-works" className="bg-white border-t border-surface-border">
