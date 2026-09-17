@@ -3,10 +3,9 @@
 The African leg of the Africa ↔ Bolivia corridor on Pollar: local agents handle
 add-money and cash-out for Pollar wallets, with a Stellar escrow holding USDC in between.
 
-This repository holds the backend, a FastAPI service for orders, agent floats, the
-Stellar escrow and the public proof page:
+| Folder | What |
+|---|---|
+| `backend/` | FastAPI service: orders, agent floats, the Stellar escrow, the proof page. [README](backend/README.md) · [architecture](backend/ARCHITECTURE.md) |
+| `front-end/` | Next.js app: landing page, dashboard, send, orders, agent desk, proof. [README](front-end/README.md) |
 
-- [backend/README.md](backend/README.md): run it, the endpoints, deployment
-- [backend/ARCHITECTURE.md](backend/ARCHITECTURE.md): how the code is organized
-
-The frontend is built separately. It uses the API documented at `/docs`.
+The front-end calls the API documented at `/docs`, with its schema at `/openapi.json`.
