@@ -7,7 +7,7 @@ import {
   FiHome, FiSend, FiList, FiShield, FiBriefcase, FiLogOut, FiCopy
 } from "react-icons/fi";
 
-const NAV = [
+export const NAV = [
   { href: "/dashboard", icon: FiHome, label: "Dashboard" },
   { href: "/send", icon: FiSend, label: "Send Global" },
   { href: "/orders/mock-order-id", icon: FiList, label: "Orders" },
@@ -20,7 +20,7 @@ export function Sidebar() {
   const { user, logout } = useAuth();
 
   return (
-    <aside className="w-64 flex-shrink-0 flex flex-col h-screen bg-white border-r border-surface-border sticky top-0">
+    <aside className="hidden md:flex w-64 flex-shrink-0 flex-col h-screen bg-white border-r border-surface-border sticky top-0">
       {/* Logo — clicking takes you home */}
       <Link href="/" className="flex items-center gap-3 px-6 py-6 border-b border-surface-border hover:bg-surface-hover transition-colors cursor-pointer">
         <span className="text-lg font-extrabold text-foreground tracking-tight">Puente</span>
