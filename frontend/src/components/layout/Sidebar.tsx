@@ -23,9 +23,6 @@ export function Sidebar() {
     <aside className="w-64 flex-shrink-0 flex flex-col h-screen bg-white border-r border-surface-border sticky top-0">
       {/* Logo — clicking takes you home */}
       <Link href="/" className="flex items-center gap-3 px-6 py-6 border-b border-surface-border hover:bg-surface-hover transition-colors cursor-pointer">
-        <div className="w-9 h-9 rounded-xl bg-pollar-blue flex items-center justify-center text-white font-extrabold text-lg shadow-blue">
-          P
-        </div>
         <span className="text-lg font-extrabold text-foreground tracking-tight">Puente</span>
       </Link>
 

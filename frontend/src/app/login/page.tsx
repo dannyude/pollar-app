@@ -21,11 +21,7 @@ function LoginForm() {
 
   return (
     <div className="bg-white rounded-3xl shadow-modal p-10">
-      {/* Logo */}
       <Link href="/" className="flex items-center gap-3 mb-8 hover:opacity-80 transition-opacity w-fit cursor-pointer">
-        <div className="w-12 h-12 rounded-2xl bg-pollar-blue flex items-center justify-center text-white font-extrabold text-2xl shadow-blue">
-          P
-        </div>
         <div>
           <p className="text-lg font-extrabold text-foreground leading-none">Puente</p>
           <p className="text-xs text-muted">Africa ↔ Latin America</p>

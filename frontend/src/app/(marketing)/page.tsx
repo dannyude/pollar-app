@@ -96,9 +96,6 @@ export default function LandingPage() {
         {/* ── Navbar ──────────────────────────────────────────── */}
         <header className="relative z-50 flex items-center justify-between max-w-6xl mx-auto px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5 cursor-pointer">
-            <div className="w-8 h-8 rounded-xl bg-pollar-blue flex items-center justify-center text-white font-extrabold shadow-blue">
-              P
-            </div>
             <span className="text-lg font-extrabold tracking-tight text-white">Puente</span>
           </Link>
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-white/70">
