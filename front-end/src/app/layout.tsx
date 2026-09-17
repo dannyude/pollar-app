@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "../app/globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import { PollarAppProvider } from "@/lib/pollar";
 import { ToastContainer } from "@/components/ui/Toast";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -19,10 +20,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={jakarta.variable}>
       <body>
-        <AuthProvider>
-          {children}
-          <ToastContainer />
-        </AuthProvider>
+        <PollarAppProvider>
+          <AuthProvider>
+            {children}
+            <ToastContainer />
+          </AuthProvider>
+        </PollarAppProvider>
       </body>
     </html>
   );

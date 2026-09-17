@@ -3,22 +3,20 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { api, Agent, ApiError } from "@/api/client";
+import { api, Agent, ApiError, Order, PayoutDetails, fiat, num, usdc } from "@/api/client";
 import { toast } from "@/hooks/useToast";
 import {
-  FiArrowRight, FiShield, FiTrendingUp, FiClock, FiSend, FiPlus, FiStar
+  FiArrowRight, FiShield, FiTrendingUp, FiSend, FiPlus, FiStar, FiDownload
 } from "react-icons/fi";
 import { Modal } from "@/components/ui/Modal";
 
-// ─── Mock data clearly labelled ──────────────────────────────────────────────
-const MOCK_AGENTS: Agent[] = [
-  { id: "agt-123", name: "Tunde O.", bank_name: "GTBank", account_number: "0123456789", account_name: "Tunde Bello", rate_ngn_usd: 1550, available_usdc: 500 },
-  { id: "agt-456", name: "Chioma E.", bank_name: "Zenith Bank", account_number: "9876543210", account_name: "Chioma Eze", rate_ngn_usd: 1545, available_usdc: 1200 },
-];
-const MOCK_RECENT = [
-  { id: "ord-1", type: "cash_in", status: "completed", fiat_amount: 5000, usdc_amount: 3.22, created_at: "5 mins ago" },
-  { id: "ord-2", type: "cash_out", status: "awaiting_fiat", fiat_amount: 15000, usdc_amount: 9.67, created_at: "1 hr ago" },
-];
+function timeAgo(iso: string) {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
+  return new Date(iso).toLocaleDateString();
+}
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -36,8 +34,27 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** The account details the agent needs to pay you, per rail. Keys are the API's. */
+const PAYOUT_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
+  bank_transfer: [
+    { key: "bank", label: "Bank", placeholder: "GTBank" },
+    { key: "accountNumber", label: "Account number", placeholder: "0123456789" },
+    { key: "accountName", label: "Account name", placeholder: "Ada Obi" },
+  ],
+  mobile_money: [
+    { key: "provider", label: "Provider", placeholder: "Opay" },
+    { key: "phoneNumber", label: "Phone number", placeholder: "+234 803 000 1111" },
+    { key: "accountName", label: "Account name", placeholder: "Ada Obi" },
+  ],
+  cash: [
+    { key: "location", label: "Pickup point", placeholder: "Yaba market, stall 12" },
+    { key: "contactPhone", label: "Your phone", placeholder: "+234 803 000 1111" },
+    { key: "accountName", label: "Your name", placeholder: "Ada Obi" },
+  ],
+};
+
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, balance } = useAuth();
   const router = useRouter();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -45,21 +62,62 @@ export default function Dashboard() {
   const [cashInModal, setCashInModal] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [creating, setCreating] = useState(false);
+  const [recent, setRecent] = useState<Order[]>([]);
+  const [cashOutModal, setCashOutModal] = useState(false);
+  const [cashOutAgent, setCashOutAgent] = useState<Agent | null>(null);
+  const [usdcAmount, setUsdcAmount] = useState("10");
+  const [payout, setPayout] = useState<Record<string, string>>({});
 
-  // ⚡ REAL: Hits GET /api/agents — falls back to mock if backend is offline
+  // GET /api/agents — the desks that can sell USDC right now
   useEffect(() => {
     api.getAgents()
       .then((data) => { setAgents(data); setLoadingAgents(false); })
-      .catch(() => {
-        setAgents(MOCK_AGENTS); // clearly labelled mock fallback
+      .catch((e) => {
         setLoadingAgents(false);
-        toast.warning("Demo Mode", "Backend offline — showing demo agent data.");
+        toast.error("Can't reach the API", e instanceof ApiError ? e.message : "Is the backend running?");
       });
   }, []);
 
+  // GET /api/orders — your own orders, newest first
+  useEffect(() => {
+    api.getOrders("user").then(setRecent).catch(() => setRecent([]));
+  }, []);
+
   const usdcEstimate = selectedAgent && amount
-    ? (parseFloat(amount) / selectedAgent.rate_ngn_usd).toFixed(2)
+    ? (parseFloat(amount) / num(selectedAgent.rateSell)).toFixed(2)
     : "—";
+
+  // Cash out: the agent buys your USDC, so their buy rate prices it.
+  const payoutFields = PAYOUT_FIELDS[cashOutAgent?.rail ?? "bank_transfer"] ?? [];
+  const fiatEstimate = cashOutAgent && usdcAmount
+    ? fiat(String(parseFloat(usdcAmount) * num(cashOutAgent.rateBuy)), cashOutAgent.currency)
+    : "—";
+
+  const openCashOut = (agent?: Agent) => {
+    const desk = agent ?? cashOutAgent ?? agents[0] ?? null;
+    if (!desk) {
+      toast.error("No agents online", "Nobody can buy your USDC right now.");
+      return;
+    }
+    if (desk.id !== cashOutAgent?.id) setPayout({});
+    setCashOutAgent(desk);
+    setCashOutModal(true);
+  };
+
+  const handleCreateCashOut = async () => {
+    if (!cashOutAgent) return;
+    setCreating(true);
+    try {
+      const order = await api.createCashOut(cashOutAgent.id, parseFloat(usdcAmount), payout as unknown as PayoutDetails);
+      toast.success("Order created", "Send the USDC to the escrow to lock it in.");
+      router.push(`/orders/${order.id}`);
+    } catch (e) {
+      toast.error("Couldn't create the order", e instanceof ApiError ? e.message : "The API didn't respond.");
+    } finally {
+      setCreating(false);
+      setCashOutModal(false);
+    }
+  };
 
   const openCashIn = (agent: Agent) => {
     setSelectedAgent(agent);
@@ -71,19 +129,11 @@ export default function Dashboard() {
     if (!selectedAgent) return;
     setCreating(true);
     try {
-      const order = await api.createOrder({
-        type: "cash_in",
-        agentId: selectedAgent.id,
-        fiatAmount: parseFloat(amount),
-      });
-        toast.success("Order Created!", `Reference: ${order.payment_reference}`);
+      const order = await api.createCashIn(selectedAgent.id, parseFloat(amount));
+      toast.success("Order created", `Quote the reference ${order.pay?.reference ?? order.ref} on your transfer.`);
       router.push(`/orders/${order.id}`);
     } catch (e) {
-      if (e instanceof ApiError) toast.error("Error", e.message);
-      else {
-        toast.info("Demo Mode", "Routing to mock order tracker.");
-        router.push("/orders/mock-order-id");
-      }
+      toast.error("Couldn't create the order", e instanceof ApiError ? e.message : "The API didn't respond.");
     } finally {
       setCreating(false);
       setCashInModal(false);
@@ -112,7 +162,7 @@ export default function Dashboard() {
           <div>
             <p className="text-blue-100 text-sm font-medium mb-2">Pollar Wallet Balance</p>
             <p className="text-5xl font-extrabold tracking-tight">
-              {user?.usdc_balance?.toFixed(2) ?? "0.00"}
+              {balance ? usdc(balance) : "—"}
               <span className="text-2xl text-blue-200 font-semibold ml-2">USDC</span>
             </p>
           </div>
@@ -121,7 +171,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2 w-fit">
-          <span className="text-xs font-mono text-blue-100">{user?.stellar_address}</span>
+          <span className="text-xs font-mono text-blue-100">{user?.wallet}</span>
         </div>
       </div>
 
@@ -130,7 +180,7 @@ export default function Dashboard() {
         {[
           { label: "Buy USDC", icon: FiPlus, action: () => setCashInModal(true), primary: true },
           { label: "Send Global", icon: FiSend, action: () => router.push("/send") },
-          { label: "Orders", icon: FiClock, action: () => router.push("/orders/mock-order-id") },
+          { label: "Cash out", icon: FiDownload, action: () => openCashOut() },
           { label: "Agent Desk", icon: FiShield, action: () => router.push("/agent") },
         ].map((item) => (
           <button
@@ -181,11 +231,11 @@ export default function Dashboard() {
                         <h3 className="text-base font-bold text-foreground">{agent.name}</h3>
                         <FiShield size={13} className="text-pollar-blue" title="Verified" />
                       </div>
-                      <p className="text-xs text-muted">{agent.bank_name}</p>
+                      <p className="text-xs text-muted">{agent.institution ?? agent.rail.replace("_", " ")}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-extrabold text-foreground">₦{agent.rate_ngn_usd.toLocaleString()}</p>
+                    <p className="text-sm font-extrabold text-foreground">{fiat(agent.rateSell, agent.currency)}</p>
                     <p className="text-xs text-muted">per USDC</p>
                   </div>
                 </div>
@@ -193,7 +243,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs text-success font-semibold bg-green-50 px-2.5 py-1 rounded-full border border-green-100">
                     <FiStar size={11} />
-                    ${agent.available_usdc} float
+                    {usdc(agent.availableUsdc)} USDC float
                   </div>
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-pollar-blue group-hover:gap-2.5 transition-all">
                     Select <FiArrowRight size={13} />
@@ -209,10 +259,10 @@ export default function Dashboard() {
       <div>
         <h2 className="text-xl font-extrabold text-foreground mb-5">Recent Activity</h2>
         <div className="bg-white rounded-2xl border border-surface-border shadow-sm overflow-hidden">
-          {MOCK_RECENT.map((order, i) => (
+          {recent.map((order, i) => (
             <div
               key={order.id}
-              className={`flex items-center justify-between px-6 py-4 hover:bg-slate-50 cursor-pointer transition ${i < MOCK_RECENT.length - 1 ? "border-b border-surface-border" : ""}`}
+              className={`flex items-center justify-between px-6 py-4 hover:bg-slate-50 cursor-pointer transition ${i < recent.length - 1 ? "border-b border-surface-border" : ""}`}
               onClick={() => router.push(`/orders/${order.id}`)}
             >
               <div className="flex items-center gap-4">
@@ -222,20 +272,22 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-foreground capitalize">{order.type.replace("_", " ")}</p>
-                  <p className="text-xs text-muted">{order.created_at}</p>
+                  <p className="text-xs text-muted">{timeAgo(order.createdAt)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
-                  <p className="text-sm font-bold text-foreground">{order.usdc_amount} USDC</p>
-                  <p className="text-xs text-muted">₦{order.fiat_amount.toLocaleString()}</p>
+                  <p className="text-sm font-bold text-foreground">{usdc(order.usdcAmount)} USDC</p>
+                  <p className="text-xs text-muted">{fiat(order.fiatAmount, order.currency)}</p>
                 </div>
                 <StatusBadge status={order.status} />
               </div>
             </div>
           ))}
         </div>
-        <p className="text-xs text-muted text-center mt-3">Recent activity shown from demo data — connect backend to see live orders.</p>
+        {recent.length === 0 && (
+          <p className="text-sm text-muted text-center py-8">No orders yet. Pick an agent above to add money.</p>
+        )}
       </div>
 
       {/* ── Cash-In Modal ───────────────────────────────────── */}
@@ -248,7 +300,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="font-bold text-foreground">{selectedAgent.name}</p>
-                <p className="text-xs text-muted">{selectedAgent.bank_name} · ₦{selectedAgent.rate_ngn_usd.toLocaleString()}/USDC</p>
+                <p className="text-xs text-muted">{selectedAgent.institution ?? "Agent"} · {fiat(selectedAgent.rateSell, selectedAgent.currency)}/USDC</p>
               </div>
             </div>
 
@@ -279,6 +331,75 @@ export default function Dashboard() {
                 <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating Order...</>
               ) : (
                 <>Create Order <FiArrowRight /></>
+              )}
+            </button>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Cash-Out Modal ──────────────────────────────────── */}
+      <Modal isOpen={cashOutModal} onClose={() => setCashOutModal(false)} title="Cash out to fiat">
+        {cashOutAgent && (
+          <div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-foreground mb-2">Agent paying you</label>
+              <select
+                value={cashOutAgent.id}
+                onChange={(e) => openCashOut(agents.find((a) => a.id === e.target.value))}
+                className="w-full px-4 py-3 bg-surface-hover border border-surface-border rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-pollar-blue transition"
+              >
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} — {fiat(a.rateBuy, a.currency)}/USDC
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-foreground mb-2">Amount to sell (USDC)</label>
+              <input
+                type="number"
+                value={usdcAmount}
+                onChange={(e) => setUsdcAmount(e.target.value)}
+                className="w-full px-4 py-3 bg-surface-hover border border-surface-border rounded-xl font-bold text-lg focus:outline-none focus:ring-2 focus:ring-pollar-blue transition"
+              />
+            </div>
+
+            <div className="flex justify-between items-center p-4 bg-blue-50 rounded-xl mb-6 border border-blue-100">
+              <span className="text-sm text-slate-600">You receive:</span>
+              <span className="text-xl font-extrabold text-pollar-blue">{fiatEstimate}</span>
+            </div>
+
+            <p className="text-xs text-muted mb-3">Where {cashOutAgent.name} should send the money.</p>
+            <div className="space-y-3 mb-6">
+              {payoutFields.map((field) => (
+                <div key={field.key}>
+                  <label className="block text-xs font-semibold text-muted mb-1">{field.label}</label>
+                  <input
+                    value={payout[field.key] ?? ""}
+                    placeholder={field.placeholder}
+                    onChange={(e) => setPayout((p) => ({ ...p, [field.key]: e.target.value }))}
+                    className="w-full px-4 py-3 bg-surface-hover border border-surface-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pollar-blue transition"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={handleCreateCashOut}
+              disabled={
+                creating ||
+                !usdcAmount ||
+                parseFloat(usdcAmount) <= 0 ||
+                payoutFields.some((f) => (payout[f.key] ?? "").trim().length < 2)
+              }
+              className="w-full flex items-center justify-center gap-2 py-4 bg-pollar-blue hover:bg-pollar-blue-hover disabled:opacity-50 active:scale-95 text-white font-bold rounded-2xl shadow-blue transition-all cursor-pointer"
+            >
+              {creating ? (
+                <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating Order...</>
+              ) : (
+                <>Create cash-out <FiArrowRight /></>
               )}
             </button>
           </div>

@@ -1,19 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { api, ProofData } from "@/api/client";
+import { api, Proof, usdc } from "@/api/client";
 import { toast } from "@/hooks/useToast";
 import { FiExternalLink, FiSearch, FiShield, FiCheckCircle } from "react-icons/fi";
 
-const MOCK: ProofData = {
-  total_users: 142, total_orders: 387, total_volume_usdc: 45200.50,
-  escrow_balance: 12400, is_solvent: true,
-  recent_settled: [
-    { id: "1", amount: 3.22,   hash: "a1b2c3d4...9f8e", settled_at: new Date().toISOString() },
-    { id: "2", amount: 3.22,   hash: "c8f49e3a...a1b2", settled_at: new Date(Date.now()-60000).toISOString() },
-    { id: "3", amount: 150.00, hash: "f7d3e2c1...2e4c", settled_at: new Date(Date.now()-300000).toISOString() },
-    { id: "4", amount: 25.50,  hash: "9e2ab4f1...d1f4", settled_at: new Date(Date.now()-720000).toISOString() },
-  ],
+// Zeros until the API answers, so nothing on this page is ever invented.
+const EMPTY: Proof = {
+  network: "testnet",
+  escrow: { address: "", url: "", usdcBalance: null, obligationsUsdc: "0", solvent: null },
+  totals: { users: 0, agents: 0, completedOrders: 0, completedCashIn: 0, completedCashOut: 0, refunded: 0, volumeUsdc: "0" },
+  recent: [],
 };
 
 function timeAgo(iso: string) {
@@ -25,17 +22,21 @@ function timeAgo(iso: string) {
 }
 
 export default function ProofPage() {
-  const [data, setData] = useState<ProofData>(MOCK);
+  const [data, setData] = useState<Proof>(EMPTY);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    // ⚡ REAL: GET /api/proof
+    // GET /api/proof — public, no sign-in needed
     api.getProof()
       .then(setData)
-      .catch(() => toast.warning("Demo Data", "Backend offline — showing sample reserves data."));
+      .catch(() => toast.error("Can't reach the API", "Reserves couldn't be loaded."));
   }, []);
 
-  const filtered = data.recent_settled.filter((t) => !search || t.hash.includes(search));
+  const settled = data.recent.map((order) => {
+    const link = order.hashes.release ?? order.hashes.refund ?? order.hashes.funding;
+    return { ref: order.ref, amount: order.usdcAmount, at: order.completedAt, hash: link?.hash ?? "", url: link?.url ?? "" };
+  });
+  const filtered = settled.filter((t) => !search || t.hash.includes(search) || t.ref.includes(search.toUpperCase()));
 
   return (
     <div>
@@ -45,24 +46,32 @@ export default function ProofPage() {
       </div>
 
       {/* Solvency banner */}
-      <div className={`flex items-center gap-4 rounded-2xl p-5 mb-10 animate-fade-slide-up border ${data.is_solvent ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`} style={{ animationDelay: "0.05s" }}>
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${data.is_solvent ? "bg-success text-white" : "bg-danger text-white"}`}>
-          {data.is_solvent ? <FiCheckCircle size={24} /> : <FiShield size={24} />}
+      <div className={`flex items-center gap-4 rounded-2xl p-5 mb-10 animate-fade-slide-up border ${data.escrow.solvent === false ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`} style={{ animationDelay: "0.05s" }}>
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${data.escrow.solvent === false ? "bg-danger text-white" : "bg-success text-white"}`}>
+          {data.escrow.solvent === false ? <FiShield size={24} /> : <FiCheckCircle size={24} />}
         </div>
         <div>
-          <p className={`font-extrabold text-lg ${data.is_solvent ? "text-success" : "text-danger"}`}>
-            {data.is_solvent ? "Fully Solvent" : "Under-Collateralised"}
+          <p className={`font-extrabold text-lg ${data.escrow.solvent === false ? "text-danger" : "text-success"}`}>
+            {data.escrow.solvent === null ? "Escrow balance unavailable" : data.escrow.solvent ? "Fully backed" : "Under-collateralised"}
           </p>
-          <p className="text-sm text-muted">Escrow holds <strong>{data.escrow_balance.toLocaleString()} USDC</strong> covering all agent floats.</p>
+          <p className="text-sm text-muted">
+            Escrow holds <strong>{usdc(data.escrow.usdcBalance ?? "0")} USDC</strong> against{" "}
+            <strong>{usdc(data.escrow.obligationsUsdc)} USDC</strong> owed to agents and open cash-outs.{" "}
+            {data.escrow.url && (
+              <a href={data.escrow.url} target="_blank" rel="noopener noreferrer" className="text-pollar-blue hover:underline font-semibold">
+                View on Stellar
+              </a>
+            )}
+          </p>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-5 mb-10 animate-fade-slide-up" style={{ animationDelay: "0.1s" }}>
         {[
-          { label: "Total Users", value: data.total_users.toLocaleString(), color: "text-foreground" },
-          { label: "Volume Processed", value: `$${data.total_volume_usdc.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, color: "text-pollar-blue" },
-          { label: "Orders Settled", value: data.total_orders.toLocaleString(), color: "text-success" },
+          { label: "Users", value: data.totals.users.toLocaleString(), color: "text-foreground" },
+          { label: "Volume settled", value: `${usdc(data.totals.volumeUsdc)} USDC`, color: "text-pollar-blue" },
+          { label: "Orders settled", value: data.totals.completedOrders.toLocaleString(), color: "text-success" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-surface-border shadow-sm p-6">
             <p className="text-xs text-muted mb-2 font-medium">{s.label}</p>
@@ -93,12 +102,12 @@ export default function ProofPage() {
           </thead>
           <tbody>
             {filtered.map((tx) => (
-              <tr key={tx.id} className="border-b border-surface-border last:border-0 hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 font-mono text-sm text-pollar-blue">{tx.hash}</td>
-                <td className="px-6 py-4 font-extrabold text-foreground">{tx.amount.toFixed(2)} <span className="font-normal text-muted text-xs">USDC</span></td>
-                <td className="px-6 py-4 text-sm text-muted">{timeAgo(tx.settled_at)}</td>
+              <tr key={tx.ref} className="border-b border-surface-border last:border-0 hover:bg-slate-50 transition-colors">
+                <td className="px-6 py-4 font-mono text-sm text-pollar-blue">{tx.hash ? `${tx.hash.slice(0, 8)}…${tx.hash.slice(-6)}` : tx.ref}</td>
+                <td className="px-6 py-4 font-extrabold text-foreground">{usdc(tx.amount)} <span className="font-normal text-muted text-xs">USDC</span></td>
+                <td className="px-6 py-4 text-sm text-muted">{timeAgo(tx.at)}</td>
                 <td className="px-6 py-4">
-                  <a href={`https://stellar.expert/explorer/testnet/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer"
+                  <a href={tx.url} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-pollar-blue hover:underline cursor-pointer font-semibold">
                     Stellar <FiExternalLink size={11} />
                   </a>

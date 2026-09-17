@@ -7,87 +7,199 @@ export const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Set Bearer token from Pollar SDK session
-export const setAuthHeader = (token: string) => {
-  apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+/**
+ * Where the Pollar session token comes from. Read fresh on every request, because
+ * the SDK rotates the access token while the app is open.
+ */
+let readToken: (() => string | null) | null = null;
+
+export const setSessionTokenSource = (provider: () => string | null) => {
+  readToken = provider;
 };
 
-// Dev-only auth (requires DEV_AUTH=1 on backend)
+/** Local testing only; needs DEV_AUTH=1 on the backend. */
 export const setDevAuthHeader = (userId: string, stellarAddress: string) => {
+  readToken = null;
   apiClient.defaults.headers.common['Authorization'] = `Dev ${userId} ${stellarAddress}`;
 };
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+export const clearAuthHeader = () => {
+  readToken = null;
+  delete apiClient.defaults.headers.common['Authorization'];
+};
+
+apiClient.interceptors.request.use((config) => {
+  const token = readToken?.();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// ─── Types: these mirror backend/app/web/schemas.py exactly ──────────────────
+// JSON is camelCase and every amount is a decimal string ("5.0000000", "8100.00").
 
 export type OrderType = 'cash_in' | 'cash_out';
+
 export type OrderStatus =
   | 'awaiting_fiat'
   | 'fiat_sent'
   | 'releasing'
   | 'completed'
+  | 'expired'
+  | 'disputed'
   | 'awaiting_usdc'
   | 'usdc_locked'
-  | 'expired'
   | 'refunding'
-  | 'refunded'
-  | 'disputed';
+  | 'refunded';
+
+/** Endpoints the current viewer may call right now, straight from the API. */
+export type OrderAction = 'fiat-sent' | 'usdc-sent' | 'confirm' | 'refund' | 'dispute';
+
+export type Rail = 'bank_transfer' | 'mobile_money' | 'cash';
 
 export interface Agent {
   id: string;
   name: string;
-  bank_name: string;
-  account_number: string;
-  account_name: string;
-  rate_ngn_usd: number;
-  available_usdc: number;
+  country: string;
+  currency: string;
+  rail: Rail;
+  /** Bank or mobile-money provider. Account numbers appear on an order, never here. */
+  institution: string | null;
+  /** Fiat per USDC the agent pays when you cash out. */
+  rateBuy: string;
+  /** Fiat per USDC you pay when you add money. */
+  rateSell: string;
+  minFiat: string;
+  maxFiat: string;
+  availableUsdc: string;
+  maxCashInFiat: string;
 }
 
-export interface OrderTimeline {
-  status: OrderStatus;
+export interface AgentSelf extends Agent {
+  floatUsdc: string;
+  reservedUsdc: string;
+  openOrders: number;
+}
+
+export interface TxLink {
+  hash: string;
+  url: string;
+}
+
+export interface OrderEvent {
+  from: OrderStatus | null;
+  to: OrderStatus;
+  actor: 'user' | 'agent' | 'system';
   at: string;
-  actor?: string;
-  note?: string;
+  meta: Record<string, unknown>;
 }
 
-export interface Escrow {
+/** cash_in: where to send fiat, and the reference to quote. */
+export interface PayInstructions {
+  rail: Rail;
+  reference: string;
+  bank?: string;
+  accountNumber?: string;
+  accountName?: string;
+  provider?: string;
+  phoneNumber?: string;
+  location?: string;
+  contactPhone?: string;
+}
+
+/** cash_out: where to send USDC. The memo is required. */
+export interface EscrowTarget {
   address: string;
+  asset: { code: string; issuer: string };
   memo: string;
-  asset: { type: string; code: string; issuer: string };
 }
 
 export interface Order {
   id: string;
+  ref: string;
   type: OrderType;
   status: OrderStatus;
-  customer_id: string;
-  agent_id: string;
-  fiat_amount: number;
-  fiat_currency: string;
-  usdc_amount: number;
-  payment_reference?: string;
-  stellar_hash?: string;
-  escrow?: Escrow;
-  timeline?: OrderTimeline[];
-  actions: string[]; // dynamic list of allowed actions for current user
+  viewerRole: 'user' | 'agent';
+  actions: OrderAction[];
+  currency: string;
+  fiatAmount: string;
+  usdcAmount: string;
+  rate: string;
+  agent: { id: string; name: string; rail: Rail };
+  userWallet: string;
+  pay: PayInstructions | null;
+  escrow: EscrowTarget | null;
+  payout: Record<string, string> | null;
+  agentReference: string | null;
+  disputeReason: string | null;
+  hashes: { funding: TxLink | null; release: TxLink | null; refund: TxLink | null };
+  expiresAt: string | null;
+  lockedAt: string | null;
+  refundAvailableAt: string | null;
+  fiatSentAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  /** True (HTTP 202) while an escrow payment is still landing; keep polling. */
+  pending: boolean;
+  /** The timeline: present on a single order, null in lists. */
+  events: OrderEvent[] | null;
 }
 
-export interface User {
-  id: string;
-  email: string;
-  stellar_address: string;
-  usdc_balance?: number;
+export interface Me {
+  user: { id: string; wallet: string; email: string | null };
+  agent: AgentSelf | null;
 }
 
-export interface ProofData {
-  total_users: number;
-  total_orders: number;
-  total_volume_usdc: number;
-  escrow_balance: number;
-  is_solvent: boolean;
-  recent_settled: Array<{ id: string; amount: number; hash: string; settled_at: string }>;
+export interface Proof {
+  network: 'testnet' | 'mainnet';
+  escrow: {
+    address: string;
+    url: string;
+    usdcBalance: string | null;
+    obligationsUsdc: string;
+    solvent: boolean | null;
+  };
+  totals: {
+    users: number;
+    agents: number;
+    completedOrders: number;
+    completedCashIn: number;
+    completedCashOut: number;
+    refunded: number;
+    volumeUsdc: string;
+  };
+  recent: Array<{
+    ref: string;
+    type: OrderType;
+    status: 'completed' | 'refunded';
+    currency: string;
+    fiatAmount: string;
+    usdcAmount: string;
+    completedAt: string;
+    hashes: { funding: TxLink | null; release: TxLink | null; refund: TxLink | null };
+  }>;
 }
 
-// ─── API Error shape ─────────────────────────────────────────────────────────
+/** Bank details for a cash-out payout. Shape depends on the agent's rail. */
+export type PayoutDetails =
+  | { bank: string; accountNumber: string; accountName: string }
+  | { provider: string; phoneNumber: string; accountName: string }
+  | { location: string; contactPhone: string; accountName: string };
+
+// ─── Amounts ─────────────────────────────────────────────────────────────────
+// The API sends decimal strings so nothing is lost in rounding. Convert only for
+// display and arithmetic, never for sending money amounts back.
+
+export const num = (amount: string | null | undefined) => (amount ? parseFloat(amount) : 0);
+
+export const fiat = (amount: string, currency = 'NGN') => {
+  const symbol = currency === 'NGN' ? '₦' : '';
+  return symbol + num(amount).toLocaleString(undefined, { maximumFractionDigits: 2 });
+};
+
+export const usdc = (amount: string) => num(amount).toFixed(2);
+
+// ─── Errors ──────────────────────────────────────────────────────────────────
+
 export class ApiError extends Error {
   code: string;
   details?: unknown;
@@ -98,92 +210,52 @@ export class ApiError extends Error {
   }
 }
 
-// Intercept and normalise API errors
 apiClient.interceptors.response.use(
   (res) => res,
   (err) => {
     const data = err.response?.data;
     if (data?.error) {
-      return Promise.reject(
-        new ApiError(data.error.code, data.error.message, data.error.details)
-      );
+      return Promise.reject(new ApiError(data.error.code, data.error.message, data.error.details));
     }
     return Promise.reject(err);
   }
 );
 
-// ─── API Methods ─────────────────────────────────────────────────────────────
+// ─── Calls ───────────────────────────────────────────────────────────────────
+
 export const api = {
-  // Auth
-  getMe: async () => {
-    const res = await apiClient.get<User>('/me');
-    return res.data;
-  },
+  getMe: async () => (await apiClient.get<Me>('/me')).data,
 
-  // Agents
-  getAgents: async (country = 'NG') => {
-    const res = await apiClient.get<Agent[]>(`/agents?country=${country}`);
-    return res.data;
-  },
+  getAgents: async (country = 'NG') => (await apiClient.get<Agent[]>('/agents', { params: { country } })).data,
 
-  // Orders
-  createOrder: async (payload: {
-    type: OrderType;
-    agentId: string;
-    fiatAmount?: number;
-    usdcAmount?: number;
-    payout?: string;
-  }) => {
-    const res = await apiClient.post<Order>('/orders', payload);
-    return res.data;
-  },
+  /** Add money: you pay the agent fiat, the escrow releases USDC to your wallet. */
+  createCashIn: async (agentId: string, fiatAmount: number) =>
+    (await apiClient.post<Order>('/orders', { type: 'cash_in', agentId, fiatAmount })).data,
 
-  getOrders: async (as: 'user' | 'agent', scope?: 'open') => {
-    const params = new URLSearchParams({ as });
-    if (scope) params.append('scope', scope);
-    const res = await apiClient.get<Order[]>(`/orders?${params}`);
-    return res.data;
-  },
+  /** Cash out: you send USDC to the escrow, the agent pays fiat to this account. */
+  createCashOut: async (agentId: string, usdcAmount: number, payout: PayoutDetails) =>
+    (await apiClient.post<Order>('/orders', { type: 'cash_out', agentId, usdcAmount, payout })).data,
 
-  getOrder: async (id: string) => {
-    const res = await apiClient.get<Order>(`/orders/${id}`);
-    return res.data;
-  },
+  getOrders: async (as: 'user' | 'agent' = 'user', scope?: 'open') =>
+    (await apiClient.get<Order[]>('/orders', { params: { as, ...(scope ? { scope } : {}) } })).data,
 
-  // Cash-In: customer marks fiat sent
-  markFiatSent: async (id: string, reference: string) => {
-    const res = await apiClient.post<Order>(`/orders/${id}/fiat-sent`, { reference });
-    return res.data;
-  },
+  getOrder: async (id: string) => (await apiClient.get<Order>(`/orders/${id}`)).data,
 
-  // Cash-Out: customer attaches runTx hash
-  markUsdcSent: async (id: string, txHash: string) => {
-    const res = await apiClient.post<Order>(`/orders/${id}/usdc-sent`, { txHash });
-    return res.data;
-  },
+  /** cash_in: the customer paid. cash_out: the agent paid out, quoting a reference. */
+  markFiatSent: async (id: string, reference?: string) =>
+    (await apiClient.post<Order>(`/orders/${id}/fiat-sent`, reference ? { reference } : {})).data,
 
-  // Cash-In: agent confirms fiat arrived → releases escrow
-  // Cash-Out: customer confirms fiat arrived
-  confirm: async (id: string) => {
-    const res = await apiClient.post<Order>(`/orders/${id}/confirm`);
-    return res.data;
-  },
+  /** cash_out: attach the hash of the USDC payment to escrow; verified on Stellar. */
+  markUsdcSent: async (id: string, txHash: string) =>
+    (await apiClient.post<Order>(`/orders/${id}/usdc-sent`, { txHash })).data,
 
-  // Cash-Out: customer refunds USDC after payout window
-  refund: async (id: string) => {
-    const res = await apiClient.post<Order>(`/orders/${id}/refund`);
-    return res.data;
-  },
+  /** cash_in: the agent confirms the fiat arrived. cash_out: the customer does. */
+  confirm: async (id: string) => (await apiClient.post<Order>(`/orders/${id}/confirm`)).data,
 
-  // Either side can dispute
-  dispute: async (id: string, reason: string) => {
-    const res = await apiClient.post<Order>(`/orders/${id}/dispute`, { reason });
-    return res.data;
-  },
+  refund: async (id: string) => (await apiClient.post<Order>(`/orders/${id}/refund`)).data,
 
-  // Proof of Reserves
-  getProof: async () => {
-    const res = await apiClient.get<ProofData>('/proof');
-    return res.data;
-  },
+  dispute: async (id: string, reason: string) =>
+    (await apiClient.post<Order>(`/orders/${id}/dispute`, { reason })).data,
+
+  getProof: async () => (await apiClient.get<Proof>('/proof')).data,
 };

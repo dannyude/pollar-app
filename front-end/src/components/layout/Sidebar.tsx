@@ -10,7 +10,7 @@ import {
 export const NAV = [
   { href: "/dashboard", icon: FiHome, label: "Dashboard" },
   { href: "/send", icon: FiSend, label: "Send Global" },
-  { href: "/orders/mock-order-id", icon: FiList, label: "Orders" },
+  { href: "/orders", icon: FiList, label: "Orders" },
   { href: "/agent", icon: FiBriefcase, label: "Agent Desk" },
   { href: "/proof", icon: FiShield, label: "Proof" },
 ];
@@ -60,7 +60,7 @@ export function Sidebar() {
             </div>
           </div>
           <div className="flex items-center gap-2 bg-slate-50 border border-surface-border rounded-xl px-3 py-2 mb-3 cursor-pointer hover:bg-surface-hover transition" title="Copy address">
-            <span className="font-mono text-xs text-muted flex-1 truncate">{user.stellar_address}</span>
+            <span className="font-mono text-xs text-muted flex-1 truncate">{user.wallet}</span>
             <FiCopy size={12} className="text-muted flex-shrink-0" />
           </div>
           <button

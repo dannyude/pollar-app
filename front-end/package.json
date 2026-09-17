@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@pollar/core": "^0.11.3",
+    "@pollar/react": "^0.11.3",
     "axios": "^1.20.0",
     "next": "16.3.5",
     "react": "19.2.8",

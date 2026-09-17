@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePollar } from "@pollar/react";
 import { useAuth } from "@/context/AuthContext";
-import { api, ApiError } from "@/api/client";
+import { usdc } from "@/api/client";
 import { toast } from "@/hooks/useToast";
 import { FiCheckCircle, FiArrowRight, FiGlobe } from "react-icons/fi";
 
 export default function SendPage() {
-  const { user } = useAuth();
+  const { balance, mode } = useAuth();
+  const { runTx, getClient } = usePollar();
   const [address, setAddress] = useState("");
   const [amount, setAmount] = useState("3.22");
   const [isQuoting, setIsQuoting] = useState(false);
@@ -16,31 +18,55 @@ export default function SendPage() {
   const [isSending, setIsSending] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
 
-  const getQuote = () => {
+  const getQuote = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
     setIsQuoting(true);
     setQuote(null);
-    // ⚠️ MOCK: Replace with real Pollar SDK getRampsQuote()
-    setTimeout(() => {
-      setQuote({ bob: parseFloat(amount) * 6.91, rate: 6.91 });
+    try {
+      // Pollar prices the Bolivian leg: USDC out, bolivianos into a bank there.
+      // Pollar's ramp quotes are per country + currency; Bolivia pays out in BOB.
+      const quotes = await getClient().getRampsQuote({
+        direction: "offramp",
+        country: "BO",
+        currency: "BOB",
+        amount: parseFloat(amount),
+      });
+      const list = quotes as unknown as Array<{ fiatAmount?: string | number; rate?: string | number }>;
+      const best = Array.isArray(list) ? list[0] : (quotes as unknown as { fiatAmount?: string | number; rate?: string | number });
+      const bob = parseFloat(String(best?.fiatAmount ?? "0"));
+      const rate = parseFloat(String(best?.rate ?? "0"));
+      if (!bob) throw new Error("no quote");
+      setQuote({ bob, rate });
+    } catch {
+      toast.warning("No live quote", "Pollar's BOB ramp isn't enabled for this app yet. You can still send the USDC.");
+    } finally {
       setIsQuoting(false);
-      toast.info("Live Quote", "Rate from Pollar ramp — valid for 30 seconds.");
-    }, 800);
+    }
   };
 
   const handleSend = async () => {
+    if (!/^G[A-Z2-7]{55}$/.test(address.trim())) {
+      toast.error("Check the address", "A Pollar wallet address starts with G and is 56 characters.");
+      return;
+    }
     setIsSending(true);
     try {
-      // ⚡ REAL flow:
-      // 1. runTx via Pollar SDK → txHash
-      // 2. api.markUsdcSent(orderId, txHash)
-      await api.markUsdcSent("mock-order-id", "mock-tx-hash");
-    } catch { /* demo */ }
-    setTimeout(() => {
+      const result = await runTx("payment", {
+        destination: address.trim(),
+        amount,
+        asset: { type: "credit_alphanum4", code: "USDC", issuer: process.env.NEXT_PUBLIC_USDC_ISSUER! },
+      });
+      if (result.status === "error") {
+        toast.error("Payment failed", "Stellar rejected it. Nothing was sent.");
+        return;
+      }
+      setTxHash(result.hash);
+      toast.success("Sent", `${amount} USDC is on its way.`);
+    } catch {
+      toast.error("Payment failed", "Your wallet couldn't sign this payment.");
+    } finally {
       setIsSending(false);
-      setTxHash("c8f49e3a1b2d...f7e9");
-      toast.success("Sent", `${amount} USDC is on its way to Bolivia.`);
-    }, 1500);
+    }
   };
 
   if (txHash) {
@@ -50,10 +76,13 @@ export default function SendPage() {
           <FiCheckCircle size={40} className="text-success" />
         </div>
         <h2 className="text-2xl font-extrabold text-foreground mb-2">Sent Successfully</h2>
-        <p className="text-muted mb-6">{amount} USDC sent to Bolivia. María will receive Bs. {(parseFloat(amount) * 6.91).toFixed(2)}.</p>
+        <p className="text-muted mb-6">
+          {amount} USDC sent{quote ? `. The recipient can cash out about Bs. ${quote.bob.toFixed(2)} through Pollar's ramp.` : "."}
+        </p>
         <div className="bg-white rounded-2xl border border-surface-border p-5 mb-6 text-left">
           <p className="text-xs text-muted mb-1">Transaction Hash</p>
-          <p className="font-mono text-sm text-pollar-blue break-all">{txHash}</p>
+          <a href={`https://stellar.expert/explorer/testnet/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
+            className="font-mono text-sm text-pollar-blue break-all hover:underline">{txHash}</a>
         </div>
         <Link href="/proof" className="flex items-center justify-center gap-2 px-6 py-3.5 bg-pollar-blue hover:bg-pollar-blue-hover active:scale-95 text-white font-bold rounded-2xl shadow-blue transition-all cursor-pointer">
           View on Explorer <FiArrowRight size={16} />
@@ -77,7 +106,7 @@ export default function SendPage() {
       {/* Balance */}
       <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-surface-border shadow-sm mb-6 animate-fade-slide-up" style={{ animationDelay: "0.05s" }}>
         <p className="text-sm font-medium text-muted">Your Balance</p>
-        <p className="text-lg font-extrabold text-foreground">{user?.usdc_balance?.toFixed(2) ?? "0.00"} <span className="text-pollar-blue">USDC</span></p>
+        <p className="text-lg font-extrabold text-foreground">{balance ? usdc(balance) : "—"} <span className="text-pollar-blue">USDC</span></p>
       </div>
 
       <div className="bg-white rounded-2xl border border-surface-border shadow-sm p-6 animate-fade-slide-up" style={{ animationDelay: "0.1s" }}>
@@ -121,7 +150,7 @@ export default function SendPage() {
           </div>
         )}
 
-        <button onClick={handleSend} disabled={!quote || isSending}
+        <button onClick={handleSend} disabled={isSending || mode !== "pollar" || !address || !amount}
           className="w-full flex items-center justify-center gap-2 py-4 bg-pollar-blue hover:bg-pollar-blue-hover disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 text-white font-bold rounded-2xl shadow-blue transition-all cursor-pointer">
           {isSending ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Signing on Stellar...</> : <>Send {amount} USDC to Bolivia <FiArrowRight /></>}
         </button>
