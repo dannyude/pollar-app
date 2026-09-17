@@ -85,6 +85,21 @@ function LiveTransferCard() {
 }
 
 export default function LandingPage() {
+  const [isHidden, setIsHidden] = useState(false);
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      setIsScrolled(currentScrollY > 20);
+      setIsHidden(currentScrollY > lastScrollY && currentScrollY > 80);
+      setLastScrollY(currentScrollY);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [lastScrollY]);
+
   return (
     <div className="min-h-screen bg-slate-50 text-foreground overflow-x-hidden">
       {/* ── Dark Hero Wrapper ──────────────────────────────────────────── */}
@@ -94,31 +109,33 @@ export default function LandingPage() {
         <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* ── Navbar ──────────────────────────────────────────── */}
-        <header className="relative z-50 flex items-center justify-between max-w-6xl mx-auto px-6 py-5">
-          <Link href="/" className="flex items-center gap-2.5 cursor-pointer">
-            <span className="text-lg font-extrabold tracking-tight text-white">Puente</span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-white/70">
-            <a href="#how-it-works" className="hover:text-white transition-colors cursor-pointer">How it Works</a>
-            <Link href="/proof" className="hover:text-white transition-colors cursor-pointer">Proof of Reserves</Link>
-          </nav>
-          <Link
-            href="/login"
-            className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-white bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded-xl transition-all cursor-pointer backdrop-blur-md"
-          >
-            Sign In <FiChevronRight size={14} />
-          </Link>
-          {/* Mobile sign in only icon */}
-          <Link
-            href="/login"
-            className="flex sm:hidden items-center justify-center w-10 h-10 text-white bg-white/10 border border-white/20 backdrop-blur-md rounded-xl"
-          >
-            <FiChevronRight size={18} />
-          </Link>
+        <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out ${isHidden ? "-translate-y-full" : "translate-y-0"} ${isScrolled ? "bg-slate-950/80 backdrop-blur-md border-b border-white/10 py-3 shadow-lg" : "bg-transparent py-5 border-transparent"}`}>
+          <div className="flex items-center justify-between max-w-6xl mx-auto px-6">
+            <Link href="/" className="flex items-center gap-2.5 cursor-pointer">
+              <span className="text-lg font-extrabold tracking-tight text-white">Puente</span>
+            </Link>
+            <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-white/70">
+              <a href="#how-it-works" className="hover:text-white transition-colors cursor-pointer">How it Works</a>
+              <Link href="/proof" className="hover:text-white transition-colors cursor-pointer">Proof of Reserves</Link>
+            </nav>
+            <Link
+              href="/login"
+              className="hidden sm:flex items-center gap-1.5 text-sm font-semibold text-white bg-white/10 hover:bg-white/20 border border-white/20 px-4 py-2.5 rounded-xl transition-all cursor-pointer backdrop-blur-md"
+            >
+              Sign In <FiChevronRight size={14} />
+            </Link>
+            {/* Mobile sign in only icon */}
+            <Link
+              href="/login"
+              className="flex sm:hidden items-center justify-center w-10 h-10 text-white bg-white/10 border border-white/20 backdrop-blur-md rounded-xl"
+            >
+              <FiChevronRight size={18} />
+            </Link>
+          </div>
         </header>
 
         {/* ── Hero ─────────────────────────────────────────────── */}
-        <section className="relative max-w-6xl mx-auto px-6 pt-12 md:pt-20 pb-20 md:pb-32 flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+        <section className="relative max-w-6xl mx-auto px-6 pt-24 md:pt-32 pb-20 md:pb-32 flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
           {/* Left — Copy */}
           <div className="flex-1 relative z-10 animate-fade-slide-up text-center lg:text-left">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] mb-6 text-white">
