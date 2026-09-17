@@ -32,9 +32,6 @@ export function Navbar() {
       <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 cursor-pointer">
-          <div className="w-8 h-8 rounded-full bg-pollar-blue flex items-center justify-center text-white font-bold text-lg shadow-blue">
-            P
-          </div>
           <span className="text-xl font-bold tracking-tight text-foreground">Puente</span>
         </Link>
 
