@@ -1,0 +1,2 @@
+# The backend keeps its own ignore file: backend/.gitignore
+.DS_Store
