@@ -4,12 +4,34 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePollar } from "@pollar/react";
 import { useAuth } from "@/context/AuthContext";
+import { usePollarReady } from "@/lib/pollar";
 import { usdc } from "@/api/client";
 import { usdcIssuer } from "@/lib/usdc";
 import { toast } from "@/hooks/useToast";
 import { FiCheckCircle, FiArrowRight, FiGlobe } from "react-icons/fi";
 
 export default function SendPage() {
+  // Every control here needs Pollar to sign; without the provider there is
+  // nothing to render but an explanation.
+  const ready = usePollarReady();
+  if (!ready) return <PollarRequired />;
+  return <Send />;
+}
+
+function PollarRequired() {
+  return (
+    <div className="max-w-xl mx-auto bg-white rounded-2xl border border-surface-border shadow-sm p-10 text-center">
+      <FiGlobe size={24} className="mx-auto text-muted mb-3" />
+      <h1 className="text-xl font-extrabold text-foreground mb-2">Sending needs a Pollar wallet</h1>
+      <p className="text-sm text-muted">
+        This app is running without a Pollar key, so there&apos;s no wallet to sign the payment. Add
+        NEXT_PUBLIC_POLLAR_PUBLISHABLE_KEY and sign in to send USDC.
+      </p>
+    </div>
+  );
+}
+
+function Send() {
   const { balance, mode } = useAuth();
   const { runTx, getClient, network } = usePollar();
   const [address, setAddress] = useState("");

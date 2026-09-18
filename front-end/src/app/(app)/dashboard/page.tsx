@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { api, Agent, ApiError, Order, PayoutDetails, fiat, newIdempotencyKey, num, usdc } from "@/api/client";
 import { toast } from "@/hooks/useToast";
 import {
-  FiArrowRight, FiShield, FiTrendingUp, FiSend, FiPlus, FiStar, FiDownload
+  FiArrowRight, FiShield, FiTrendingUp, FiSend, FiPlus, FiStar, FiDownload, FiClock
 } from "react-icons/fi";
 import { Modal } from "@/components/ui/Modal";
 import { ActivateUsdc } from "@/components/wallet/ActivateUsdc";
@@ -153,12 +154,12 @@ export default function Dashboard() {
           <p className="text-sm font-medium text-muted mb-1">Welcome back</p>
           <h1 className="text-3xl font-extrabold text-foreground tracking-tight">{user?.name}</h1>
         </div>
-        <button
-          onClick={() => router.push("/send")}
-          className="flex items-center gap-2 px-5 py-3 bg-pollar-blue hover:bg-pollar-blue-hover active:scale-95 text-white font-semibold rounded-2xl shadow-blue transition-all cursor-pointer"
+        <Link
+          href="/proof"
+          className="flex items-center gap-2 px-5 py-3 bg-white border border-surface-border hover:bg-surface-hover text-foreground font-semibold rounded-2xl shadow-sm transition-all cursor-pointer"
         >
-          <FiSend size={16} /> Send Global
-        </button>
+          <FiShield size={16} /> Proof of reserves
+        </Link>
       </div>
 
       {/* ── Wallet Balance Card ─────────────────────────────── */}
@@ -183,10 +184,10 @@ export default function Dashboard() {
       {/* ── Quick Actions ───────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10 animate-fade-slide-up" style={{ animationDelay: "0.1s" }}>
         {[
-          { label: "Buy USDC", icon: FiPlus, action: () => setCashInModal(true), primary: true },
-          { label: "Send Global", icon: FiSend, action: () => router.push("/send") },
-          { label: "Cash out", icon: FiDownload, action: () => openCashOut() },
-          { label: "Agent Desk", icon: FiShield, action: () => router.push("/agent") },
+          { label: "Add money", icon: FiPlus, action: () => setCashInModal(true), primary: true },
+          { label: "Cash out", icon: FiDownload, action: () => openCashOut(), primary: true },
+          { label: "Your orders", icon: FiClock, action: () => router.push("/orders") },
+          { label: "Send abroad", icon: FiSend, action: () => router.push("/send") },
         ].map((item) => (
           <button
             key={item.label}
@@ -205,18 +206,54 @@ export default function Dashboard() {
 
       <ActivateUsdc />
 
+      {/* What the product actually does — the escrow is the point, and it was
+          only explained on a page called Proof, last in the nav. */}
+      <div className="bg-white rounded-2xl border border-surface-border shadow-sm p-6 mb-10 animate-fade-slide-up" style={{ animationDelay: "0.12s" }}>
+        <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
+          <h2 className="text-lg font-extrabold text-foreground">Naira in, USDC out — without trusting anyone</h2>
+          <Link href="/proof" className="text-sm font-bold text-pollar-blue hover:underline whitespace-nowrap">
+            See the escrow →
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            ["1. You pay an agent", "A bank transfer or mobile money, in naira, quoting the order's reference."],
+            ["2. The escrow holds the USDC", "It was already there as the agent's float — not the agent's to keep."],
+            ["3. Stellar settles it", "The agent confirms your naira and the escrow releases the USDC in seconds, on-chain."],
+          ].map(([title, body]) => (
+            <div key={title}>
+              <p className="text-sm font-bold text-foreground mb-1">{title}</p>
+              <p className="text-xs text-muted leading-relaxed">{body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* ── Agents ─────────────────────────────────────────── */}
       <div className="mb-10">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-extrabold text-foreground">Available Agents</h2>
-          <span className="text-xs bg-green-50 text-success font-bold px-3 py-1.5 rounded-full border border-green-100">
-            {agents.length} Online
+          <span className={`text-xs font-bold px-3 py-1.5 rounded-full border ${
+            agents.length ? "bg-green-50 text-success border-green-100" : "bg-slate-100 text-muted border-surface-border"
+          }`}>
+            {agents.length ? `${agents.length} Online` : "None online"}
           </span>
         </div>
 
         {loadingAgents ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1, 2].map((i) => <div key={i} className="h-40 bg-white rounded-2xl border border-surface-border animate-pulse" />)}
+          </div>
+        ) : agents.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-surface-border shadow-sm p-10 text-center">
+            <FiClock size={24} className="mx-auto text-muted mb-3" />
+            <p className="text-sm font-bold text-foreground mb-1">No agent desks are online right now</p>
+            <p className="text-sm text-muted max-w-md mx-auto">
+              Agents are people who hold USDC float in the escrow and move naira on their side. Until one is
+              online there&apos;s nobody to buy from — you can still{" "}
+              <Link href="/proof" className="text-pollar-blue font-semibold hover:underline">check the reserves</Link>{" "}
+              or come back shortly.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -6,6 +6,7 @@ import { FiAlertCircle, FiCheckCircle } from "react-icons/fi";
 
 import { api } from "@/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { usePollarReady } from "@/lib/pollar";
 import { usdcIssuer } from "@/lib/usdc";
 import { toast } from "@/hooks/useToast";
 
@@ -20,6 +21,16 @@ import { toast } from "@/hooks/useToast";
  * separate, one-time setting in the Pollar dashboard (Tokens & Trustlines).
  */
 export function ActivateUsdc() {
+  const { canHoldUsdc, mode } = useAuth();
+  // usePollar() throws outside <PollarProvider>, and that provider only exists
+  // when the app is configured with a Pollar key — so the hook has to live in a
+  // child that is never rendered without it.
+  const ready = usePollarReady();
+  if (mode !== "pollar" || !ready || canHoldUsdc !== false) return null;
+  return <EstablishTrustline />;
+}
+
+function EstablishTrustline() {
   const { canHoldUsdc, refreshBalance, mode } = useAuth();
   const { setTrustline, network, openEnabledAssetsModal } = usePollar();
   const [failure, setFailure] = useState<string | null>(null);

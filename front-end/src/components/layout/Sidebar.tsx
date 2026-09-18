@@ -7,13 +7,16 @@ import {
   FiHome, FiSend, FiList, FiShield, FiBriefcase, FiLogOut, FiCopy
 } from "react-icons/fi";
 
-export const NAV = [
+const ALL_NAV = [
   { href: "/dashboard", icon: FiHome, label: "Dashboard" },
-  { href: "/send", icon: FiSend, label: "Send Global" },
   { href: "/orders", icon: FiList, label: "Orders" },
-  { href: "/agent", icon: FiBriefcase, label: "Agent Desk" },
+  { href: "/send", icon: FiSend, label: "Send Global" },
+  { href: "/agent", icon: FiBriefcase, label: "Agent Desk", agentsOnly: true },
   { href: "/proof", icon: FiShield, label: "Proof" },
 ];
+
+/** The desk is only a destination for someone who runs one. */
+export const navFor = (isAgent: boolean | undefined) => ALL_NAV.filter((item) => !item.agentsOnly || isAgent);
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -28,7 +31,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {NAV.map(({ href, icon: Icon, label }) => {
+        {navFor(user?.isAgent).map(({ href, icon: Icon, label }) => {
           const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href.split("/").slice(0, 2).join("/")));
           return (
             <Link

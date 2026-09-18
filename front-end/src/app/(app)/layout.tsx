@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FiLogOut } from "react-icons/fi";
-import { Sidebar, NAV } from "@/components/layout/Sidebar";
+import { Sidebar, navFor } from "@/components/layout/Sidebar";
 
 const WAITING_ON: Record<string, string> = {
   starting: "Starting Pollar…",
@@ -96,7 +96,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Nav */}
       <nav className={`md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-surface-border flex items-center justify-around px-2 z-40 pb-safe transition-transform duration-300 ${isHidden ? "translate-y-full" : "translate-y-0"}`}>
-        {NAV.map(({ href, icon: Icon, label }) => {
+        {navFor(user.isAgent).map(({ href, icon: Icon, label }) => {
           const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href.split("/").slice(0, 2).join("/")));
           return (
             <Link key={href} href={href} className={`flex flex-col items-center justify-center w-full h-full gap-1 text-[10px] font-medium transition-colors cursor-pointer ${active ? "text-pollar-blue" : "text-muted hover:text-foreground"}`}>
