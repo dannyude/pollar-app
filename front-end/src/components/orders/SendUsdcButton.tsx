@@ -30,7 +30,14 @@ export function SendUsdcButton({ order, onSent }: { order: Order; onSent: () => 
         { memo: { type: "text", value: order.escrow.memo } },
       );
       if (result.status === "error") {
-        toast.error("Payment failed", "Stellar rejected the payment. Nothing was sent.");
+        // Pollar can refuse before anything reaches Stellar (policy, limits, a
+        // build error). Show what it said — a generic message sends you hunting
+        // on the wrong network.
+        const why = [result.code, result.resultCode, result.message, result.details]
+          .filter(Boolean)
+          .join(" · ");
+        console.error("[puente] runTx payment failed —", result);
+        toast.error("Payment failed", why || "Pollar rejected the payment. Nothing was sent.");
         return;
       }
       await api.markUsdcSent(order.id, result.hash);

@@ -58,7 +58,11 @@ export default function SendPage() {
         asset: { type: "credit_alphanum4", code: "USDC", issuer: usdcIssuer(network) },
       });
       if (result.status === "error") {
-        toast.error("Payment failed", "Stellar rejected it. Nothing was sent.");
+        const why = [result.code, result.resultCode, result.message, result.details]
+          .filter(Boolean)
+          .join(" · ");
+        console.error("[puente] runTx payment failed —", result);
+        toast.error("Payment failed", why || "Pollar rejected it. Nothing was sent.");
         return;
       }
       setTxHash(result.hash);
