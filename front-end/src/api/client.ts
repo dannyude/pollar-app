@@ -234,6 +234,17 @@ apiClient.interceptors.response.use(
   }
 );
 
+/**
+ * Opening an order is the one call that isn't naturally repeatable: a second one
+ * would reserve more of the agent's float. Passing a key makes a retry — or a
+ * double-tap — return the order that already exists.
+ */
+const idempotent = (key?: string) => (key ? { headers: { 'Idempotency-Key': key } } : undefined);
+
+/** A key for one user intent; reuse it across retries of that same intent. */
+export const newIdempotencyKey = () =>
+  globalThis.crypto?.randomUUID?.() ?? `k-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 // ─── Calls ───────────────────────────────────────────────────────────────────
 
 export const api = {
@@ -242,12 +253,12 @@ export const api = {
   getAgents: async (country = 'NG') => (await apiClient.get<Agent[]>('/agents', { params: { country } })).data,
 
   /** Add money: you pay the agent fiat, the escrow releases USDC to your wallet. */
-  createCashIn: async (agentId: string, fiatAmount: number) =>
-    (await apiClient.post<Order>('/orders', { type: 'cash_in', agentId, fiatAmount })).data,
+  createCashIn: async (agentId: string, fiatAmount: number, idempotencyKey?: string) =>
+    (await apiClient.post<Order>('/orders', { type: 'cash_in', agentId, fiatAmount }, idempotent(idempotencyKey))).data,
 
   /** Cash out: you send USDC to the escrow, the agent pays fiat to this account. */
-  createCashOut: async (agentId: string, usdcAmount: number, payout: PayoutDetails) =>
-    (await apiClient.post<Order>('/orders', { type: 'cash_out', agentId, usdcAmount, payout })).data,
+  createCashOut: async (agentId: string, usdcAmount: number, payout: PayoutDetails, idempotencyKey?: string) =>
+    (await apiClient.post<Order>('/orders', { type: 'cash_out', agentId, usdcAmount, payout }, idempotent(idempotencyKey))).data,
 
   getOrders: async (as: 'user' | 'agent' = 'user', scope?: 'open') =>
     (await apiClient.get<Order[]>('/orders', { params: { as, ...(scope ? { scope } : {}) } })).data,

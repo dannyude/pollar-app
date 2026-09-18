@@ -3,7 +3,7 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse
 
 from ...deps import Deps
@@ -36,13 +36,26 @@ async def list_orders(
 
 
 @router.post("", response_model=OrderView, status_code=201)
-async def open_order(body: CreateOrderIn, user: User = Depends(current_user), deps: Deps = Depends(get_deps)) -> OrderView:
-    """Starts an add-money (`cash_in`) or cash-out (`cash_out`) order with an agent."""
+async def open_order(
+    body: CreateOrderIn,
+    user: User = Depends(current_user),
+    deps: Deps = Depends(get_deps),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=200),
+) -> OrderView:
+    """Starts an add-money (`cash_in`) or cash-out (`cash_out`) order with an agent.
+
+    Send `Idempotency-Key` (any unique string per intent) and a repeated request
+    returns the order it already opened instead of opening a second one.
+    """
     if body.type == "cash_in":
-        snapshot = await orders.open_cash_in(deps, user, agent_id=body.agent_id, fiat_amount=body.fiat_amount, usdc_amount=body.usdc_amount)
+        snapshot = await orders.open_cash_in(
+            deps, user, agent_id=body.agent_id, fiat_amount=body.fiat_amount, usdc_amount=body.usdc_amount,
+            idempotency_key=idempotency_key,
+        )
     else:
         snapshot = await orders.open_cash_out(
-            deps, user, agent_id=body.agent_id, payout=body.payout, fiat_amount=body.fiat_amount, usdc_amount=body.usdc_amount
+            deps, user, agent_id=body.agent_id, payout=body.payout, fiat_amount=body.fiat_amount,
+            usdc_amount=body.usdc_amount, idempotency_key=idempotency_key,
         )
     return present_order(snapshot, deps.stellar)
 

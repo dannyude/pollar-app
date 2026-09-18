@@ -20,6 +20,10 @@ _ENVELOPE_COLUMNS = {
 }
 
 
+class DuplicateIdempotencyKey(Exception):
+    """This user already opened an order with that Idempotency-Key."""
+
+
 class DuplicateRef(Exception):
     """Another order already has this reference."""
 
@@ -89,12 +93,18 @@ async def settling_since(conn: asyncpg.Connection, updated_before: datetime) -> 
 # ─── Writes ─────────────────────────────────────────────────────────────────────
 
 
+async def by_idempotency_key(conn: asyncpg.Connection, user_id: str, key: str) -> Order | None:
+    row = await conn.fetchrow("select * from orders where user_id = $1 and idempotency_key = $2", user_id, key)
+    return to_order(row) if row else None
+
+
 async def insert(conn: asyncpg.Connection, new: NewOrder, *, meta: dict[str, Any]) -> Order:
     try:
         row = await conn.fetchrow(
             """insert into orders (ref, type, status, user_id, agent_id, user_wallet, currency,
-                                   fiat_amount, usdc_amount, rate, pay_details, payout_details, expires_at)
-               values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                                   fiat_amount, usdc_amount, rate, pay_details, payout_details, expires_at,
+                                   idempotency_key)
+               values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                returning *""",
             new.ref,
             new.type,
@@ -109,10 +119,13 @@ async def insert(conn: asyncpg.Connection, new: NewOrder, *, meta: dict[str, Any
             new.pay_details,
             new.payout_details,
             new.expires_at,
+            new.idempotency_key,
         )
     except asyncpg.UniqueViolationError as exc:
         if exc.constraint_name == "orders_ref_key":
             raise DuplicateRef from exc
+        if exc.constraint_name == "orders_idempotency_uq":
+            raise DuplicateIdempotencyKey from exc
         raise
     order = to_order(row)
     await _add_event(conn, order.id, None, order.status, "user", meta)

@@ -29,7 +29,7 @@ from ..gateways import stellar
 from ..repositories import agents as agent_repo
 from ..repositories import orders as order_repo
 from ..repositories.db import transaction
-from ..repositories.orders import DuplicateFundingTx, DuplicateRef
+from ..repositories.orders import DuplicateFundingTx, DuplicateIdempotencyKey, DuplicateRef
 from .payouts import PayoutResult, pay_out
 
 REF_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -53,12 +53,20 @@ class OrderSnapshot:
 # ─── Add money (cash_in) ────────────────────────────────────────────────────────
 
 
-async def open_cash_in(deps: Deps, user: User, *, agent_id: UUID, fiat_amount: Decimal | None = None, usdc_amount: Decimal | None = None) -> OrderSnapshot:
+async def open_cash_in(
+    deps: Deps,
+    user: User,
+    *,
+    agent_id: UUID,
+    fiat_amount: Decimal | None = None,
+    usdc_amount: Decimal | None = None,
+    idempotency_key: str | None = None,
+) -> OrderSnapshot:
     """The customer asks an agent for USDC and is told where to send fiat."""
     await _agent_for(deps, user, agent_id)
     # Check before the customer pays: USDC can only be released to a wallet that can hold it.
     ensure_can_hold_usdc(await stellar.fetch_account(deps.stellar, user.wallet))
-    return await _open(deps, user, "cash_in", agent_id, fiat_amount, usdc_amount, payout_details=None)
+    return await _open(deps, user, "cash_in", agent_id, fiat_amount, usdc_amount, payout_details=None, idempotency_key=idempotency_key)
 
 
 async def mark_cash_in_paid(deps: Deps, user: User, order_id: UUID) -> OrderSnapshot:
@@ -93,11 +101,12 @@ async def open_cash_out(
     payout: dict[str, Any] | None,
     fiat_amount: Decimal | None = None,
     usdc_amount: Decimal | None = None,
+    idempotency_key: str | None = None,
 ) -> OrderSnapshot:
     """The customer asks an agent for fiat and is told where to send USDC."""
     agent = await _agent_for(deps, user, agent_id)
     payout_details = validate_details(agent.rail, payout, "payout")
-    return await _open(deps, user, "cash_out", agent_id, fiat_amount, usdc_amount, payout_details=payout_details)
+    return await _open(deps, user, "cash_out", agent_id, fiat_amount, usdc_amount, payout_details=payout_details, idempotency_key=idempotency_key)
 
 
 async def attach_cash_out_payment(deps: Deps, user: User, order_id: UUID, tx_hash: str) -> OrderSnapshot:
@@ -285,9 +294,17 @@ async def _open(
     usdc_amount: Decimal | None,
     *,
     payout_details: dict[str, Any] | None,
+    idempotency_key: str | None = None,
 ) -> OrderSnapshot:
     now = deps.clock()
     cash_in = order_type == "cash_in"
+
+    # A repeated request — a double-tap, a retried POST — must return the order it
+    # already opened, not open a second one holding more of the agent's float.
+    replayed = await _replayed_order(deps, user, idempotency_key)
+    if replayed is not None:
+        return replayed
+
     for _ in range(3):
         try:
             async with transaction(deps.pool) as conn:
@@ -313,13 +330,30 @@ async def _open(
                         pay_details=agent.pay_details if cash_in else None,
                         payout_details=payout_details,
                         expires_at=now + (deps.cash_in_ttl if cash_in else deps.cash_out_ttl),
+                        idempotency_key=idempotency_key,
                     ),
                     meta={"fiatAmount": fmt_fiat(price.fiat), "usdcAmount": fmt_usdc(price.usdc), "rate": fmt_rate(price.rate)},
                 )
         except DuplicateRef:
             continue
+        except DuplicateIdempotencyKey:
+            # Two identical requests raced; the other one won and the float it
+            # reserved is this order's. Hand back what it created.
+            replayed = await _replayed_order(deps, user, idempotency_key)
+            if replayed is None:  # pragma: no cover - the row exists by definition
+                raise
+            return replayed
         return await get(deps, user, order.id)
     raise AppError(ErrorKind.UNAVAILABLE, "REF_COLLISION", "Couldn't allocate an order reference. Try again.")
+
+
+async def _replayed_order(deps: Deps, user: User, idempotency_key: str | None) -> OrderSnapshot | None:
+    """The order this user already opened with that key, if any."""
+    if idempotency_key is None:
+        return None
+    async with transaction(deps.pool) as conn:
+        existing = await order_repo.by_idempotency_key(conn, user.id, idempotency_key)
+    return await get(deps, user, existing.id) if existing else None
 
 
 async def _agent_for(deps: Deps, user: User, agent_id: UUID) -> Agent:

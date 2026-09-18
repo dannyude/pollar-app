@@ -67,6 +67,12 @@ create table if not exists orders (
   )
 );
 
+-- A client can send Idempotency-Key when opening an order, so a double-tap
+-- returns the first order instead of opening a second one that reserves float.
+alter table orders add column if not exists idempotency_key text;
+create unique index if not exists orders_idempotency_uq
+  on orders (user_id, idempotency_key) where idempotency_key is not null;
+
 create index if not exists orders_user_idx on orders (user_id, created_at desc);
 create index if not exists orders_agent_idx on orders (agent_id, created_at desc);
 create index if not exists orders_status_idx on orders (status, type);

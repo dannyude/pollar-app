@@ -119,6 +119,8 @@ class NewOrder:
     pay_details: dict[str, Any] | None
     payout_details: dict[str, Any] | None
     expires_at: datetime
+    #: Client-supplied, so retrying the same request returns the same order.
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True)

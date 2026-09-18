@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { api, Agent, ApiError, Order, PayoutDetails, fiat, num, usdc } from "@/api/client";
+import { api, Agent, ApiError, Order, PayoutDetails, fiat, newIdempotencyKey, num, usdc } from "@/api/client";
 import { toast } from "@/hooks/useToast";
 import {
   FiArrowRight, FiShield, FiTrendingUp, FiSend, FiPlus, FiStar, FiDownload
@@ -68,6 +68,8 @@ export default function Dashboard() {
   const [cashOutAgent, setCashOutAgent] = useState<Agent | null>(null);
   const [usdcAmount, setUsdcAmount] = useState("10");
   const [payout, setPayout] = useState<Record<string, string>>({});
+  // One key per intent, so a double-tap or a retry can't open a second order.
+  const [orderKey, setOrderKey] = useState(() => newIdempotencyKey());
 
   // GET /api/agents — the desks that can sell USDC right now
   useEffect(() => {
@@ -95,6 +97,7 @@ export default function Dashboard() {
     : "—";
 
   const openCashOut = (agent?: Agent) => {
+    setOrderKey(newIdempotencyKey());
     const desk = agent ?? cashOutAgent ?? agents[0] ?? null;
     if (!desk) {
       toast.error("No agents online", "Nobody can buy your USDC right now.");
@@ -109,7 +112,7 @@ export default function Dashboard() {
     if (!cashOutAgent) return;
     setCreating(true);
     try {
-      const order = await api.createCashOut(cashOutAgent.id, parseFloat(usdcAmount), payout as unknown as PayoutDetails);
+      const order = await api.createCashOut(cashOutAgent.id, parseFloat(usdcAmount), payout as unknown as PayoutDetails, orderKey);
       toast.success("Order created", "Send the USDC to the escrow to lock it in.");
       router.push(`/orders/${order.id}`);
     } catch (e) {
@@ -121,6 +124,7 @@ export default function Dashboard() {
   };
 
   const openCashIn = (agent: Agent) => {
+    setOrderKey(newIdempotencyKey());
     setSelectedAgent(agent);
     setCashInModal(true);
   };
@@ -130,7 +134,7 @@ export default function Dashboard() {
     if (!selectedAgent) return;
     setCreating(true);
     try {
-      const order = await api.createCashIn(selectedAgent.id, parseFloat(amount));
+      const order = await api.createCashIn(selectedAgent.id, parseFloat(amount), orderKey);
       toast.success("Order created", `Quote the reference ${order.pay?.reference ?? order.ref} on your transfer.`);
       router.push(`/orders/${order.id}`);
     } catch (e) {

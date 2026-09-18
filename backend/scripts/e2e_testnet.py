@@ -220,6 +220,7 @@ def run_flows(client, dsn, usdc, escrow, customer, sponsor, agent_wallet, strang
     expect(order["actions"] == ["fiat-sent"], "customer's only action is fiat-sent", order["actions"])
     oid = order["id"]
     expect(call(client, "GET", f"/api/orders/{oid}", stranger).status_code == 404, "a stranger gets 404")
+
     expect(call(client, "POST", f"/api/orders/{oid}/confirm", ada).json()["error"]["code"] == "WRONG_PARTY", "customer can't release their own USDC")
     expect(call(client, "POST", f"/api/orders/{oid}/confirm", tunde).json()["error"]["code"] == "INVALID_STATE", "agent can't confirm before payment is marked")
     expect(call(client, "GET", "/api/me", tunde).json()["agent"]["reservedUsdc"] == "5.0000000", "5 USDC of the float is reserved")
@@ -336,6 +337,17 @@ def run_flows(client, dsn, usdc, escrow, customer, sponsor, agent_wallet, strang
     quiet = call(client, "GET", f"/api/orders/{quiet['id']}", ada).json()
     expect(quiet["status"] == "completed" and quiet["events"][-1]["actor"] == "system", "maintenance completes it", quiet["events"][-1])
     expect(Decimal(call(client, "GET", "/api/me", tunde).json()["agent"]["floatUsdc"]) - float_before == Decimal("2"), "agent float credited 2 USDC")
+
+    step("A repeated create with the same Idempotency-Key opens one order")
+    reserved_before = Decimal(call(client, "GET", "/api/me", tunde).json()["agent"]["reservedUsdc"])
+    key = {"Idempotency-Key": f"e2e-{uuid.uuid4()}"}
+    first = call(client, "POST", "/api/orders", ada | key, {"type": "cash_in", "agentId": agent_id, "fiatAmount": "1620"}).json()
+    second = call(client, "POST", "/api/orders", ada | key, {"type": "cash_in", "agentId": agent_id, "fiatAmount": "1620"}).json()
+    expect(first["id"] == second["id"], "the second request returns the first order")
+    reserved_after = Decimal(call(client, "GET", "/api/me", tunde).json()["agent"]["reservedUsdc"])
+    expect(reserved_after - reserved_before == Decimal("1"), "and the float is reserved once, not twice", reserved_after)
+    other = call(client, "POST", "/api/orders", ada, {"type": "cash_in", "agentId": agent_id, "fiatAmount": "1620"}).json()
+    expect(other["id"] != first["id"], "without a key, a repeated request is a new order")
 
     print("\nAll end-to-end checks passed.")
 
