@@ -47,8 +47,13 @@ An operator settles it after looking at the evidence:
   --note "No transfer found for this reference."
 ```
 
-A third case is not a dispute at all: the bank reversed the transfer, so nobody
-is owed anything yet and the payout should simply be made again.
+A payout reference is evidence of one bank transfer, so it belongs to one order:
+reusing one on a second order is refused with `REFERENCE_ALREADY_USED`, the way a
+Stellar payment can only fund one cash-out.
+
+A third case is not a dispute at all: the payout didn't happen — the bank
+reversed it, or it was recorded against the wrong order — so nobody is owed
+anything yet and it should simply be done again.
 
 ```bash
 .venv/bin/python -m scripts.order_resolve --ref PU-FUP34S --bounced \

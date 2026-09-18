@@ -29,7 +29,7 @@ from ..gateways import stellar
 from ..repositories import agents as agent_repo
 from ..repositories import orders as order_repo
 from ..repositories.db import transaction
-from ..repositories.orders import DuplicateFundingTx, DuplicateIdempotencyKey, DuplicateRef
+from ..repositories.orders import DuplicateAgentReference, DuplicateFundingTx, DuplicateIdempotencyKey, DuplicateRef
 from .payouts import PayoutResult, pay_out
 
 REF_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -150,7 +150,18 @@ async def mark_cash_out_paid(deps: Deps, user: User, order_id: UUID, *, referenc
     async def mark(conn: asyncpg.Connection, order: Order, role: Role, now: datetime) -> None:
         if not reference:
             raise AppError(ErrorKind.INVALID, "REFERENCE_REQUIRED", "Add the bank or mobile-money reference of your payout.")
-        await order_repo.record_transition(conn, order, "fiat_sent", actor="agent", meta={"reference": reference}, agent_reference=reference, fiat_sent_at=now)
+        try:
+            await order_repo.record_transition(
+                conn, order, "fiat_sent", actor="agent", meta={"reference": reference}, agent_reference=reference, fiat_sent_at=now
+            )
+        except DuplicateAgentReference as exc:
+            # The reference is the only evidence the fiat leg has. One transfer
+            # can't have paid two orders, and a reused one is a reused receipt.
+            raise AppError(
+                ErrorKind.CONFLICT,
+                "REFERENCE_ALREADY_USED",
+                "You've already used that reference on another order. Quote the reference of this payout.",
+            ) from exc
 
     await _act(deps, user, order_id, Action.FIAT_SENT, mark, order_type="cash_out")
     return await get(deps, user, order_id)

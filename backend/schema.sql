@@ -67,6 +67,17 @@ create table if not exists orders (
   )
 );
 
+-- A payout reference is evidence of one bank transfer, so it can't be the
+-- evidence for two orders. Scoped per agent: two desks may see the same
+-- provider sequence, one desk reusing a reference is reusing a receipt.
+do $$
+begin
+  create unique index if not exists orders_agent_reference_uq
+    on orders (agent_id, agent_reference) where agent_reference is not null;
+exception when unique_violation then
+  raise notice 'orders_agent_reference_uq not created: orders already share a payout reference. Settle them (scripts.order_resolve) and re-run.';
+end $$;
+
 -- A client can send Idempotency-Key when opening an order, so a double-tap
 -- returns the first order instead of opening a second one that reserves float.
 alter table orders add column if not exists idempotency_key text;

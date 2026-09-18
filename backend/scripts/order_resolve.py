@@ -11,7 +11,7 @@ endpoint, like registering an agent.
     # it never arrived: the customer's USDC goes back, or the agent's float is freed
     python -m scripts.order_resolve --ref PU-FUP34S --reject --note "No transfer found for this reference."
 
-    # the bank reversed it: nobody is owed anything yet, so the payout can be retried
+    # the payout didn't happen — reversed, or recorded against the wrong order
     python -m scripts.order_resolve --ref PU-FUP34S --bounced --note "Opay reversed 2609... on 18 Sep."
 
 `--bounced` is the only one that lets a second payout happen, and only an operator
@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     outcome = p.add_mutually_exclusive_group(required=True)
     outcome.add_argument("--uphold", action="store_true", help="the fiat arrived: complete the order")
     outcome.add_argument("--reject", action="store_true", help="it never arrived: return the money")
-    outcome.add_argument("--bounced", action="store_true", help="the bank reversed it: let the agent pay again")
+    outcome.add_argument("--bounced", action="store_true", help="the payout didn't happen (reversed, or recorded in error): let the agent pay again")
     p.add_argument("--note", required=True, help="what the evidence showed; both sides see this")
     return p.parse_args()
 

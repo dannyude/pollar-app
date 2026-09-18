@@ -22,6 +22,10 @@ _ENVELOPE_COLUMNS = {
 }
 
 
+class DuplicateAgentReference(Exception):
+    """This agent already used that payout reference on another order."""
+
+
 class DuplicateIdempotencyKey(Exception):
     """This user already opened an order with that Idempotency-Key."""
 
@@ -161,6 +165,8 @@ async def record_transition(
     except asyncpg.UniqueViolationError as exc:
         if exc.constraint_name == "orders_funding_tx_key":
             raise DuplicateFundingTx from exc
+        if exc.constraint_name == "orders_agent_reference_uq":
+            raise DuplicateAgentReference from exc
         raise
     if result != "UPDATE 1":
         return False
