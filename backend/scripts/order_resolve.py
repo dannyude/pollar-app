@@ -52,8 +52,14 @@ async def main() -> None:
 
     deps = await open_deps(settings())
     try:
+        if args.order_id:
+            try:
+                order_id = UUID(args.order_id.strip())
+            except ValueError:
+                sys.exit(f"{args.order_id!r} isn't an order id. Copy the whole id from the order's URL, or use --ref PU-XXXXXX.")
+
         async with transaction(deps.pool) as conn:
-            order = await (order_repo.by_ref(conn, args.ref.strip().upper()) if args.ref else order_repo.get(conn, UUID(args.order_id)))
+            order = await (order_repo.by_ref(conn, args.ref.strip().upper()) if args.ref else order_repo.get(conn, order_id))
         if order is None:
             sys.exit("No such order.")
 
