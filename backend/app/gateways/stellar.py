@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
+import httpx
+
 from stellar_sdk import Asset as StellarAsset
 from stellar_sdk import Keypair, Network, ServerAsync, StrKey, TransactionBuilder
 from stellar_sdk.client.aiohttp_client import AiohttpClient
@@ -22,6 +24,7 @@ from ..domain.payouts import SourceTx, SubmitOutcome, classify_submit_failure
 
 log = logging.getLogger("puente.stellar")
 
+FRIENDBOT_URL = "https://friendbot.stellar.org"
 PAYMENT_TIMEOUT_S = 120  # escrow payments are valid this long after signing
 MAX_FEE = 10_000  # fee bid per operation in stroops; the network charges the going rate
 
@@ -87,6 +90,24 @@ async def fetch_account(client: StellarClient, address: str) -> AccountFacts | N
     except (BaseHorizonError, BaseRequestError) as exc:
         raise _unavailable(exc) from exc
     return AccountFacts(address=address, usdc_balance=_usdc_balance(client, record))
+
+
+async def fund_testnet_account(client: StellarClient, address: str) -> None:
+    """Asks friendbot to create and fund an account. Testnet only — there is no
+    equivalent on mainnet, where Pollar (or the user) funds the wallet."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as http:
+            res = await http.get(FRIENDBOT_URL, params={"addr": address})
+    except httpx.HTTPError as exc:
+        raise stellar_unavailable() from exc
+    # Friendbot answers 400 when the account already exists, which is not a failure.
+    if res.status_code >= 400 and "exists" not in res.text.lower():
+        log.warning("friendbot refused %s: %s %s", address, res.status_code, res.text[:200])
+        raise AppError(
+            ErrorKind.UPSTREAM,
+            "WALLET_FUNDING_FAILED",
+            "Stellar's testnet faucet wouldn't fund this wallet. Try again in a moment.",
+        )
 
 
 async def fetch_transaction(client: StellarClient, tx_hash: str) -> TransactionFacts | None:

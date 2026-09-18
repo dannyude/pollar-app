@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePollar } from "@pollar/react";
 import { FiAlertCircle, FiCheckCircle } from "react-icons/fi";
 
+import { api } from "@/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { usdcIssuer } from "@/lib/usdc";
 import { toast } from "@/hooks/useToast";
@@ -28,6 +29,12 @@ export function ActivateUsdc() {
   const activate = useCallback(async () => {
     setWorking(true);
     try {
+      // A wallet Pollar failed to provision has no account on Stellar, and you
+      // can't add a trustline to an account that doesn't exist. On testnet the
+      // API repairs that first; on mainnet it's a no-op we ignore.
+      if (network === "testnet") {
+        await api.activateWallet().catch((e) => console.warn("[puente] wallet activate skipped —", e));
+      }
       const result = await setTrustline({ code: "USDC", issuer: usdcIssuer(network) });
       if (result.status === "error") {
         // TrustlineOutcome only promises `details`; the server sends more.

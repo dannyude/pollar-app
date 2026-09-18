@@ -205,3 +205,11 @@ class ProofView(CamelModel):
     escrow: ProofEscrow
     totals: ProofTotals
     recent: list[ProofOrder]
+
+
+class WalletActivationView(CamelModel):
+    """What `POST /api/wallet/activate` did, and where the wallet stands now."""
+
+    address: str
+    funded: bool
+    can_hold_usdc: bool

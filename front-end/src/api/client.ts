@@ -250,6 +250,13 @@ export const newIdempotencyKey = () =>
 export const api = {
   getMe: async () => (await apiClient.get<Me>('/me')).data,
 
+  /**
+   * Testnet only: create this wallet on Stellar if Pollar's provisioning left it
+   * without an account. Safe to call repeatedly.
+   */
+  activateWallet: async () =>
+    (await apiClient.post<{ address: string; funded: boolean; canHoldUsdc: boolean }>('/wallet/activate')).data,
+
   getAgents: async (country = 'NG') => (await apiClient.get<Agent[]>('/agents', { params: { country } })).data,
 
   /** Add money: you pay the agent fiat, the escrow releases USDC to your wallet. */
