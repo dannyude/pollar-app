@@ -80,6 +80,20 @@ export default function OrderPage() {
   }
 
   const can = (action: OrderAction) => order.actions.includes(action);
+
+  // Both sides can dispute, but only one of them is waiting on money: the agent
+  // on a cash-in, the customer on a cash-out. Telling the payer their own money
+  // "never arrived" reads as nonsense.
+  const waitingOnFiat = order.type === "cash_in" ? order.viewerRole === "agent" : order.viewerRole === "user";
+  const dispute = waitingOnFiat
+    ? {
+        label: "The money never arrived",
+        prompt: "What happened? Say what you expected and when. The other side and an admin will see this.",
+      }
+    : {
+        label: "Something's wrong with this order",
+        prompt: "What's wrong? If you've already paid, include the reference. The other side and an admin will see this.",
+      };
   const steps = STEPS[order.type];
   const reached = steps.findIndex((s) => s.status === order.status);
   const done = order.status === "completed" || order.status === "refunded";
@@ -252,13 +266,13 @@ export default function OrderPage() {
         {can("dispute") && (
           <button
             onClick={() => {
-              const reason = window.prompt("What went wrong? The other side and an admin will see this.");
+              const reason = window.prompt(dispute.prompt);
               if (reason && reason.trim().length >= 5) void run("dispute", () => api.dispute(order.id, reason.trim()));
             }}
             disabled={busy !== null}
             className="w-full flex items-center justify-center gap-2 py-3 text-sm font-semibold text-danger hover:bg-red-50 rounded-2xl transition cursor-pointer"
           >
-            <FiAlertTriangle size={15} /> The money never arrived
+            <FiAlertTriangle size={15} /> {dispute.label}
           </button>
         )}
 
