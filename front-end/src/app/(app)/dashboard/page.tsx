@@ -9,6 +9,7 @@ import {
   FiArrowRight, FiShield, FiTrendingUp, FiSend, FiPlus, FiStar, FiDownload
 } from "react-icons/fi";
 import { Modal } from "@/components/ui/Modal";
+import { ActivateUsdc } from "@/components/wallet/ActivateUsdc";
 
 function timeAgo(iso: string) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -197,6 +198,8 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+
+      <ActivateUsdc />
 
       {/* ── Agents ─────────────────────────────────────────── */}
       <div className="mb-10">

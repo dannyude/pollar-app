@@ -29,6 +29,9 @@ interface AuthContextValue {
   balance: string | null;
   isLoading: boolean;
   waiting: Waiting;
+  /** Does the wallet trust USDC on Stellar? null while unknown. */
+  canHoldUsdc: boolean | null;
+  refreshBalance: () => Promise<void>;
   mode: Mode;
   login: () => void;
   logout: () => void;
@@ -166,6 +169,10 @@ function PollarAuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextValue = {
     user,
     balance: usdcBalance(walletBalance),
+    canHoldUsdc: canHoldUsdc(walletBalance),
+    refreshBalance: async () => {
+      await refreshWalletBalance().catch(() => {});
+    },
     isLoading: (configStatus === "loading" && configPatience) || isLoading || signedIn === null,
     waiting:
       configStatus === "loading" && configPatience ? "pollar-config"
@@ -202,6 +209,8 @@ function DevAuthProvider({ children }: { children: React.ReactNode }) {
     balance: null,
     isLoading,
     waiting: isLoading ? "account" : null,
+    canHoldUsdc: null,
+    refreshBalance: async () => {},
     mode: "dev",
     login: () => {
       setDevAuthHeader(DEV_USER, DEV_WALLET!);
@@ -226,6 +235,8 @@ function UnconfiguredAuthProvider({ children }: { children: React.ReactNode }) {
     balance: null,
     isLoading: false,
     waiting: null,
+    canHoldUsdc: null,
+    refreshBalance: async () => {},
     mode: "unconfigured",
     login: () => alert("Set NEXT_PUBLIC_POLLAR_PUBLISHABLE_KEY in .env.local, then restart the dev server."),
     logout: () => {},
@@ -241,6 +252,8 @@ function StartingAuthProvider({ children }: { children: React.ReactNode }) {
     balance: null,
     isLoading: true,
     waiting: "starting",
+    canHoldUsdc: null,
+    refreshBalance: async () => {},
     mode: "pollar",
     login: () => {},
     logout: () => {},
@@ -264,5 +277,13 @@ type BalanceState = { step: string; data?: { balances?: Array<{ code?: string; b
 function usdcBalance(state: unknown): string | null {
   const balances = (state as BalanceState)?.data?.balances;
   if (!balances) return null;
-  return balances.find((b) => b.code === "USDC")?.balance ?? "0";
+  // No USDC entry means no trustline, which is not the same as a zero balance.
+  return balances.find((b) => b.code === "USDC")?.balance ?? null;
+}
+
+/** False once we know the wallet holds no USDC trustline; null while unknown. */
+function canHoldUsdc(state: unknown): boolean | null {
+  const balances = (state as BalanceState)?.data?.balances;
+  if (!balances) return null;
+  return balances.some((b) => b.code === "USDC");
 }
