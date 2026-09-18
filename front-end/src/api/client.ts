@@ -202,10 +202,13 @@ export const usdc = (amount: string) => num(amount).toFixed(2);
 
 export class ApiError extends Error {
   code: string;
+  /** HTTP status, or 0 when the request never reached the API. */
+  status: number;
   details?: unknown;
-  constructor(code: string, message: string, details?: unknown) {
+  constructor(code: string, message: string, status = 0, details?: unknown) {
     super(message);
     this.code = code;
+    this.status = status;
     this.details = details;
   }
 }
@@ -213,11 +216,18 @@ export class ApiError extends Error {
 apiClient.interceptors.response.use(
   (res) => res,
   (err) => {
+    const status = err.response?.status ?? 0;
     const data = err.response?.data;
     if (data?.error) {
-      return Promise.reject(new ApiError(data.error.code, data.error.message, data.error.details));
+      return Promise.reject(new ApiError(data.error.code, data.error.message, status, data.error.details));
     }
-    return Promise.reject(err);
+    // No error envelope: the API never answered, or answered with something else
+    // (a proxy's 502 page while the host wakes up). Callers still get an ApiError.
+    return Promise.reject(
+      status
+        ? new ApiError(`HTTP_${status}`, `The API answered ${status}.`, status)
+        : new ApiError('NETWORK_ERROR', "Couldn't reach the API.", 0),
+    );
   }
 );
 

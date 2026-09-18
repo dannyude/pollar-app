@@ -41,6 +41,9 @@ const MODE: Mode = DEV_WALLET ? "dev" : process.env.NEXT_PUBLIC_POLLAR_PUBLISHAB
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/** Backoff for a cold API host, in ms. */
+const RETRY_DELAYS = [2000, 5000, 10000, 20000];
+
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
@@ -71,27 +74,45 @@ function useProfile(signedIn: boolean | null) {
       setIsLoading(false);
       return;
     }
-    try {
-      const me = await api.getMe();
-      setUser({
-        id: me.user.id,
-        email: me.user.email,
-        name: me.user.email?.split("@")[0] ?? "You",
-        wallet: me.user.wallet,
-        isAgent: Boolean(me.agent),
-        agent: me.agent,
-      });
-      setCookie(AUTH_COOKIE, "1");
-    } catch (e) {
-      // Signed in with Pollar but the API wouldn't have us: say so, instead of
-      // silently bouncing back to the sign-in page with no explanation.
-      setUser(null);
-      clearCookie(AUTH_COOKIE);
-      const why = e instanceof ApiError ? `${e.code}: ${e.message}` : "The API didn't respond.";
-      console.error("[puente] /api/me failed —", why, e);
-      toast.error("Signed in, but the app couldn't load your account", why);
-    } finally {
-      setIsLoading(false);
+    // A free-tier API host can take a minute to wake, and answers 502 while it
+    // does. Only a 401 means the session is actually no good; everything else is
+    // worth waiting out, because giving up here throws the user back to /login.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const me = await api.getMe();
+        setUser({
+          id: me.user.id,
+          email: me.user.email,
+          name: me.user.email?.split("@")[0] ?? "You",
+          wallet: me.user.wallet,
+          isAgent: Boolean(me.agent),
+          agent: me.agent,
+        });
+        setCookie(AUTH_COOKIE, "1");
+        setIsLoading(false);
+        return;
+      } catch (e) {
+        const error = e instanceof ApiError ? e : null;
+        const rejected = error?.status === 401;
+        const why = error ? `${error.code}: ${error.message}` : "The API didn't respond.";
+        console.error(`[puente] /api/me failed (attempt ${attempt + 1}) —`, why, e);
+
+        if (!rejected && attempt < RETRY_DELAYS.length) {
+          if (attempt === 0) toast.info("Waking the server", "This takes a moment on the first request.");
+          await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        // Signed in with Pollar but the API wouldn't have us: say so, instead of
+        // silently bouncing back to the sign-in page with no explanation.
+        setUser(null);
+        if (rejected) clearCookie(AUTH_COOKIE);
+        toast.error(
+          rejected ? "Signed in, but the app couldn't load your account" : "Can't reach the API",
+          why,
+        );
+        setIsLoading(false);
+        return;
+      }
     }
   }, [signedIn]);
 
