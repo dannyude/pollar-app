@@ -245,6 +245,26 @@ const idempotent = (key?: string) => (key ? { headers: { 'Idempotency-Key': key 
 export const newIdempotencyKey = () =>
   globalThis.crypto?.randomUUID?.() ?? `k-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const RETRY_AFTER = [1500, 4000];
+
+/**
+ * Retries a create that never got an answer — the API host restarting mid-deploy,
+ * a cold start, a dropped connection. Only safe because the key makes a repeat
+ * return the same order, so this is used only when one is given.
+ */
+async function withRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run();
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : -1;
+      const worthRetrying = status === 0 || status === 502 || status === 503 || status === 504;
+      if (!worthRetrying || attempt >= RETRY_AFTER.length) throw e;
+      await new Promise((r) => setTimeout(r, RETRY_AFTER[attempt]));
+    }
+  }
+}
+
 // ─── Calls ───────────────────────────────────────────────────────────────────
 
 export const api = {
@@ -260,12 +280,18 @@ export const api = {
   getAgents: async (country = 'NG') => (await apiClient.get<Agent[]>('/agents', { params: { country } })).data,
 
   /** Add money: you pay the agent fiat, the escrow releases USDC to your wallet. */
-  createCashIn: async (agentId: string, fiatAmount: number, idempotencyKey?: string) =>
-    (await apiClient.post<Order>('/orders', { type: 'cash_in', agentId, fiatAmount }, idempotent(idempotencyKey))).data,
+  createCashIn: async (agentId: string, fiatAmount: number, idempotencyKey?: string) => {
+    const post = async () =>
+      (await apiClient.post<Order>('/orders', { type: 'cash_in', agentId, fiatAmount }, idempotent(idempotencyKey))).data;
+    return idempotencyKey ? withRetry(post) : post();
+  },
 
   /** Cash out: you send USDC to the escrow, the agent pays fiat to this account. */
-  createCashOut: async (agentId: string, usdcAmount: number, payout: PayoutDetails, idempotencyKey?: string) =>
-    (await apiClient.post<Order>('/orders', { type: 'cash_out', agentId, usdcAmount, payout }, idempotent(idempotencyKey))).data,
+  createCashOut: async (agentId: string, usdcAmount: number, payout: PayoutDetails, idempotencyKey?: string) => {
+    const post = async () =>
+      (await apiClient.post<Order>('/orders', { type: 'cash_out', agentId, usdcAmount, payout }, idempotent(idempotencyKey))).data;
+    return idempotencyKey ? withRetry(post) : post();
+  },
 
   getOrders: async (as: 'user' | 'agent' = 'user', scope?: 'open') =>
     (await apiClient.get<Order[]>('/orders', { params: { as, ...(scope ? { scope } : {}) } })).data,
