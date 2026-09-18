@@ -54,15 +54,19 @@ function clearCookie(name: string) {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
 }
 
-/** Loads the profile from the backend once a session exists, and keeps the cookie in sync. */
-function useProfile(signedIn: boolean) {
+/**
+ * Loads the profile from the backend once a session exists, and keeps the cookie in
+ * sync. `signedIn` is null until the caller knows — staying "loading" through that
+ * gap is what stops the app layout bouncing a signed-in reload to /login.
+ */
+function useProfile(signedIn: boolean | null) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (signedIn === null) return;
     if (!signedIn) {
       setUser(null);
-      clearCookie(AUTH_COOKIE);
       setIsLoading(false);
       return;
     }
@@ -95,7 +99,7 @@ function useProfile(signedIn: boolean) {
 
 /** Real sign-in: Pollar owns the session, the wallet and the balance. */
 function PollarAuthProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, openLoginModal, logout, getClient, walletBalance, refreshWalletBalance } = usePollar();
+  const { isAuthenticated, openLoginModal, logout, getClient, walletBalance, refreshWalletBalance, configStatus } = usePollar();
   const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
@@ -118,7 +122,7 @@ function PollarAuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextValue = {
     user,
     balance: usdcBalance(walletBalance),
-    isLoading: isLoading || (isAuthenticated && !signedIn),
+    isLoading: configStatus === "loading" || isLoading || (isAuthenticated && !signedIn),
     mode: "pollar",
     login: openLoginModal,
     logout: () => {
@@ -134,13 +138,12 @@ function PollarAuthProvider({ children }: { children: React.ReactNode }) {
 
 /** Local testing: the backend trusts a Dev header instead of a Pollar session. */
 function DevAuthProvider({ children }: { children: React.ReactNode }) {
-  const [signedIn, setSignedIn] = useState(false);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null); // null: haven't looked yet
 
   useEffect(() => {
-    if (typeof window !== "undefined" && localStorage.getItem("puente_dev_signed_in") === "1") {
-      setDevAuthHeader(DEV_USER, DEV_WALLET!);
-      setSignedIn(true);
-    }
+    const stored = localStorage.getItem("puente_dev_signed_in") === "1";
+    if (stored) setDevAuthHeader(DEV_USER, DEV_WALLET!);
+    setSignedIn(stored);
   }, []);
 
   const { user, isLoading, refresh } = useProfile(signedIn);

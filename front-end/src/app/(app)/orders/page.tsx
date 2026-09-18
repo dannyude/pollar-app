@@ -102,16 +102,15 @@ export default function OrdersPage() {
                   {order.type === "cash_in" ? <FiPlus size={18} /> : <FiSend size={18} />}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-foreground">
+                  <p className="text-sm font-bold text-foreground truncate">
                     {order.type === "cash_in" ? "Adding money" : "Cashing out"}
-                    <span className="font-mono text-xs text-muted ml-2">{order.ref}</span>
                   </p>
                   <p className="text-xs text-muted truncate">
-                    {order.agent.name} · {when(order.createdAt)}
+                    <span className="font-mono">{order.ref}</span> · {order.agent.name} · {when(order.createdAt)}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-4 flex-shrink-0">
+              <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-4 flex-shrink-0">
                 <div className="text-right">
                   <p className="text-sm font-bold text-foreground">{usdc(order.usdcAmount)} USDC</p>
                   <p className="text-xs text-muted">{fiat(order.fiatAmount, order.currency)}</p>
