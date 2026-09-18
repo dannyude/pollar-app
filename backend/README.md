@@ -47,10 +47,29 @@ An operator settles it after looking at the evidence:
   --note "No transfer found for this reference."
 ```
 
+A third case is not a dispute at all: the bank reversed the transfer, so nobody
+is owed anything yet and the payout should simply be made again.
+
+```bash
+.venv/bin/python -m scripts.order_resolve --ref PU-FUP34S --bounced \
+  --note "Opay reversed 2609... the same evening."
+```
+
+That returns the order to where it was before the payout — `usdc_locked` for a
+cash-out, `awaiting_fiat` with a fresh window for an add-money order — keeping
+the failed reference in the timeline, and the agent pays again on the same order.
+
+`--bounced` is the only path to a second payout, and only an operator can take
+it. Neither party can reach it by claiming a transfer failed, because every extra
+fiat payment is real money leaving someone's account. A bounce doesn't restart
+the cash-out clocks either: the customer's refund window still runs from when
+their USDC was locked, so a failed payout can't be used to hold their money
+longer.
+
 Upholding a cash-out credits the agent's float; rejecting one returns the
 customer's USDC from escrow. For an add-money order, upholding releases the USDC
 and rejecting frees the agent's reserved float. Both sides see the note in the
-order's timeline. There is deliberately no HTTP route for this.
+order's timeline. There is deliberately no HTTP route for any of this.
 
 ## Auth
 

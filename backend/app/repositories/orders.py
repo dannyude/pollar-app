@@ -13,7 +13,9 @@ from ..domain.models import Actor, EscrowEnvelope, NewOrder, Order, OrderEvent, 
 
 CLOSED_STATUSES = ["completed", "refunded", "expired"]
 
-_TRANSITION_COLUMNS = frozenset({"agent_reference", "funding_tx", "locked_at", "fiat_sent_at", "completed_at", "dispute_reason"})
+_TRANSITION_COLUMNS = frozenset(
+    {"agent_reference", "funding_tx", "locked_at", "fiat_sent_at", "completed_at", "dispute_reason", "expires_at"}
+)
 _ENVELOPE_COLUMNS = {
     PayoutKind.RELEASE: ("release_tx", "release_xdr", "release_max_time"),
     PayoutKind.REFUND: ("refund_tx", "refund_xdr", "refund_max_time"),

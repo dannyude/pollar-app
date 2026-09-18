@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import asyncpg
@@ -259,31 +259,67 @@ async def auto_complete(deps: Deps, order_id: UUID) -> None:
             await _complete_cash_out(conn, order, now, actor="system", note="No dispute within the confirmation window.")
 
 
-async def resolve_dispute(deps: Deps, order_id: UUID, *, uphold: bool, note: str) -> str:
-    """An operator settles a disputed order and says why.
+Outcome = Literal["uphold", "reject", "bounced"]
+
+
+async def resolve_payout(deps: Deps, order_id: UUID, *, outcome: Outcome, note: str) -> str:
+    """An operator settles an order whose fiat leg is in question, and says why.
 
     A dispute freezes an order on purpose: neither side can act, and no timer
-    moves it. Someone has to look at the fiat evidence against what Stellar shows
-    and decide. `uphold` means the fiat did arrive, so the order completes as it
-    would have; otherwise the money goes back where it came from — USDC returns
-    to the customer on a cash-out, and an add-money order releases the agent's
-    reserved float. Operator-only, and never reachable over HTTP.
+    moves it. Someone has to weigh the fiat evidence against what Stellar shows.
+
+    - `uphold`: the fiat arrived. The order completes as it would have.
+    - `reject`: it never arrived. USDC goes back to the customer on a cash-out;
+      an add-money order frees the agent's reserved float.
+    - `bounced`: the transfer was reversed by the bank, so nobody is owed
+      anything yet and the payment can be made again. The order goes back to
+      where it was before the payout, keeping the failed reference in its
+      timeline, and the agent tries again on this same order — which is the
+      point: a second payout must never be something either side can trigger by
+      claiming one failed.
+
+    A bounce doesn't restart the clocks on a cash-out: the customer's refund
+    window still runs from when their USDC was locked, so a failed payout can't
+    be used to hold their money longer.
     """
     now = deps.clock()
     async with transaction(deps.pool) as conn:
         order = await order_repo.get(conn, order_id, for_update=True)
         if order is None:
             raise order_not_found()
-        if order.status != "disputed":
-            raise AppError(ErrorKind.CONFLICT, "NOT_DISPUTED", f"This order is {order.status}, not disputed.")
+
+        # A bounce is also the honest answer before anyone disputes — the agent
+        # can see a reversal long before the customer notices nothing arrived.
+        allowed = {"disputed", "fiat_sent"} if outcome == "bounced" else {"disputed"}
+        if order.status not in allowed:
+            raise AppError(
+                ErrorKind.CONFLICT,
+                "NOT_RESOLVABLE",
+                f"This order is {order.status}; {outcome} applies to {' or '.join(sorted(allowed))}.",
+            )
+
+        if outcome == "bounced":
+            meta = {"note": note, "failedReference": order.agent_reference}
+            if order.type == "cash_out":
+                await order_repo.record_transition(
+                    conn, order, "usdc_locked", actor="system", meta=meta, agent_reference=None, fiat_sent_at=None
+                )
+            else:
+                # The customer's transfer came back; they get a fresh window to pay,
+                # and the agent's float stays reserved for them meanwhile.
+                await order_repo.record_transition(
+                    conn, order, "awaiting_fiat", actor="system", meta=meta, fiat_sent_at=None,
+                    expires_at=now + deps.cash_in_ttl,
+                )
+            return "usdc_locked" if order.type == "cash_out" else "awaiting_fiat"
 
         if order.type == "cash_out":
-            if uphold:
+            if outcome == "uphold":
                 await _complete_cash_out(conn, order, now, actor="system", note=note)
                 return "completed"
             await order_repo.record_transition(conn, order, "refunding", actor="system", meta={"note": note})
             kind = PayoutKind.REFUND
-        elif uphold:
+        elif outcome == "uphold":
             await order_repo.record_transition(conn, order, "releasing", actor="system", meta={"note": note})
             kind = PayoutKind.RELEASE
         else:

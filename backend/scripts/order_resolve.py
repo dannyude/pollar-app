@@ -1,4 +1,4 @@
-"""Settles a disputed order, after a human has looked at the evidence.
+"""Settles an order whose fiat leg is in question, after a human reads the evidence.
 
 A dispute freezes an order deliberately — neither side can act and no timer moves
 it — because deciding whether naira actually arrived is not something the system
@@ -8,8 +8,15 @@ endpoint, like registering an agent.
     # the fiat did arrive: finish the order as it would have finished
     python -m scripts.order_resolve --ref PU-FUP34S --uphold --note "Opay receipt 2609... matches the payout."
 
-    # it didn't: the customer's USDC goes back, or the agent's float is freed
+    # it never arrived: the customer's USDC goes back, or the agent's float is freed
     python -m scripts.order_resolve --ref PU-FUP34S --reject --note "No transfer found for this reference."
+
+    # the bank reversed it: nobody is owed anything yet, so the payout can be retried
+    python -m scripts.order_resolve --ref PU-FUP34S --bounced --note "Opay reversed 2609... on 18 Sep."
+
+`--bounced` is the only one that lets a second payout happen, and only an operator
+can say it — otherwise "it failed, let me send again" would be a claim either side
+could make, and the money could go out twice.
 """
 
 import argparse
@@ -32,7 +39,8 @@ def parse_args() -> argparse.Namespace:
     which.add_argument("--order-id", help="the order's UUID")
     outcome = p.add_mutually_exclusive_group(required=True)
     outcome.add_argument("--uphold", action="store_true", help="the fiat arrived: complete the order")
-    outcome.add_argument("--reject", action="store_true", help="it didn't: return the money")
+    outcome.add_argument("--reject", action="store_true", help="it never arrived: return the money")
+    outcome.add_argument("--bounced", action="store_true", help="the bank reversed it: let the agent pay again")
     p.add_argument("--note", required=True, help="what the evidence showed; both sides see this")
     return p.parse_args()
 
@@ -53,10 +61,13 @@ async def main() -> None:
         if order.dispute_reason:
             print(f"  disputed: {order.dispute_reason}")
 
-        status = await orders.resolve_dispute(deps, order.id, uphold=args.uphold, note=args.note.strip())
+        outcome = "uphold" if args.uphold else "bounced" if args.bounced else "reject"
+        status = await orders.resolve_payout(deps, order.id, outcome=outcome, note=args.note.strip())
         print(f"  → {status}")
         if status == "pending":
             print("  The escrow payment is still landing; maintenance will finish it.")
+        elif args.bounced:
+            print("  The agent can pay again and record the new reference on this order.")
     except AppError as exc:
         sys.exit(f"{exc.code}: {exc}")
     finally:
