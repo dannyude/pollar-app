@@ -93,6 +93,11 @@ async def settling_since(conn: asyncpg.Connection, updated_before: datetime) -> 
 # ─── Writes ─────────────────────────────────────────────────────────────────────
 
 
+async def by_ref(conn: asyncpg.Connection, ref: str) -> Order | None:
+    row = await conn.fetchrow("select * from orders where ref = $1", ref)
+    return to_order(row) if row else None
+
+
 async def by_idempotency_key(conn: asyncpg.Connection, user_id: str, key: str) -> Order | None:
     row = await conn.fetchrow("select * from orders where user_id = $1 and idempotency_key = $2", user_id, key)
     return to_order(row) if row else None

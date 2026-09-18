@@ -30,6 +30,28 @@ app once first, so their user row exists:
 An agent's float must already be sitting in the escrow. `GET /api/proof` shows
 whether the escrow balance covers every float.
 
+## Disputes
+
+Either side can dispute an order whose fiat leg is claimed but unconfirmed. That
+freezes it on purpose: no action is offered to either party and no timer moves
+it, because whether naira actually arrived is not something the system can know.
+An operator settles it after looking at the evidence:
+
+```bash
+# the fiat did arrive — finish the order as it would have finished
+.venv/bin/python -m scripts.order_resolve --ref PU-FUP34S --uphold \
+  --note "Opay receipt 2609... matches the ₦15,800 payout."
+
+# it didn't — the money goes back where it came from
+.venv/bin/python -m scripts.order_resolve --ref PU-FUP34S --reject \
+  --note "No transfer found for this reference."
+```
+
+Upholding a cash-out credits the agent's float; rejecting one returns the
+customer's USDC from escrow. For an add-money order, upholding releases the USDC
+and rejecting frees the agent's reserved float. Both sides see the note in the
+order's timeline. There is deliberately no HTTP route for this.
+
 ## Auth
 
 The app sends the Pollar session token on every call:

@@ -259,6 +259,42 @@ async def auto_complete(deps: Deps, order_id: UUID) -> None:
             await _complete_cash_out(conn, order, now, actor="system", note="No dispute within the confirmation window.")
 
 
+async def resolve_dispute(deps: Deps, order_id: UUID, *, uphold: bool, note: str) -> str:
+    """An operator settles a disputed order and says why.
+
+    A dispute freezes an order on purpose: neither side can act, and no timer
+    moves it. Someone has to look at the fiat evidence against what Stellar shows
+    and decide. `uphold` means the fiat did arrive, so the order completes as it
+    would have; otherwise the money goes back where it came from — USDC returns
+    to the customer on a cash-out, and an add-money order releases the agent's
+    reserved float. Operator-only, and never reachable over HTTP.
+    """
+    now = deps.clock()
+    async with transaction(deps.pool) as conn:
+        order = await order_repo.get(conn, order_id, for_update=True)
+        if order is None:
+            raise order_not_found()
+        if order.status != "disputed":
+            raise AppError(ErrorKind.CONFLICT, "NOT_DISPUTED", f"This order is {order.status}, not disputed.")
+
+        if order.type == "cash_out":
+            if uphold:
+                await _complete_cash_out(conn, order, now, actor="system", note=note)
+                return "completed"
+            await order_repo.record_transition(conn, order, "refunding", actor="system", meta={"note": note})
+            kind = PayoutKind.REFUND
+        elif uphold:
+            await order_repo.record_transition(conn, order, "releasing", actor="system", meta={"note": note})
+            kind = PayoutKind.RELEASE
+        else:
+            if await order_repo.record_transition(conn, order, "expired", actor="system", meta={"note": note}):
+                await agent_repo.release_reservation(conn, order.agent_id, order.usdc_amount)
+            return "expired"
+
+    result = await settle_payout(deps, order_id, kind)
+    return "pending" if result.outcome == "pending" else SETTLED[kind]
+
+
 async def settle_payout(deps: Deps, order_id: UUID, kind: PayoutKind | None = None) -> PayoutResult:
     """Drives an order's escrow payment, and records what it means once it lands."""
     if kind is None:
