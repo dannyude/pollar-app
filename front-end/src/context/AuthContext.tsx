@@ -5,7 +5,8 @@ import { usePollar } from "@pollar/react";
 
 import { usePollarReady } from "@/lib/pollar";
 
-import { AgentSelf, api, clearAuthHeader, setDevAuthHeader, setSessionTokenSource } from "@/api/client";
+import { AgentSelf, ApiError, api, clearAuthHeader, setDevAuthHeader, setSessionTokenSource } from "@/api/client";
+import { toast } from "@/hooks/useToast";
 
 export interface AuthUser {
   id: string;
@@ -81,9 +82,14 @@ function useProfile(signedIn: boolean | null) {
         agent: me.agent,
       });
       setCookie(AUTH_COOKIE, "1");
-    } catch {
+    } catch (e) {
+      // Signed in with Pollar but the API wouldn't have us: say so, instead of
+      // silently bouncing back to the sign-in page with no explanation.
       setUser(null);
       clearCookie(AUTH_COOKIE);
+      const why = e instanceof ApiError ? `${e.code}: ${e.message}` : "The API didn't respond.";
+      console.error("[puente] /api/me failed —", why, e);
+      toast.error("Signed in, but the app couldn't load your account", why);
     } finally {
       setIsLoading(false);
     }
