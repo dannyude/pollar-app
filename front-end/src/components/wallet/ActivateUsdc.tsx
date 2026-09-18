@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePollar } from "@pollar/react";
 import { FiAlertCircle, FiCheckCircle } from "react-icons/fi";
 
@@ -9,33 +9,61 @@ import { usdcIssuer } from "@/lib/usdc";
 import { toast } from "@/hooks/useToast";
 
 /**
- * A brand-new Pollar wallet can't receive USDC until it trusts the asset on
- * Stellar, and the API refuses to open an order that would pay into one that
- * can't. Rather than leave the user with that error, offer the trustline.
+ * A Stellar wallet can only hold an asset it trusts, and a wallet Pollar has just
+ * created trusts nothing — so the API would refuse to open an order that pays into
+ * it. Establishing that trustline is onboarding, not a decision: it happens by
+ * itself the first time we see a wallet without one, and the card below only
+ * appears if that fails.
+ *
+ * This is per wallet. Whether the application may transact in USDC at all is a
+ * separate, one-time setting in the Pollar dashboard (Tokens & Trustlines).
  */
 export function ActivateUsdc() {
   const { canHoldUsdc, refreshBalance, mode } = useAuth();
   const { setTrustline, network, openEnabledAssetsModal } = usePollar();
+  const [failure, setFailure] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const attempted = useRef(false);
 
-  if (mode !== "pollar" || canHoldUsdc !== false) return null;
-
-  const activate = async () => {
+  const activate = useCallback(async () => {
     setWorking(true);
     try {
       const result = await setTrustline({ code: "USDC", issuer: usdcIssuer(network) });
       if (result.status === "error") {
-        toast.error("Couldn't activate the wallet", result.details ?? "Stellar rejected the trustline.");
+        // TrustlineOutcome only promises `details`; the server sends more.
+        const extra = result as { code?: string; message?: string };
+        const why = [extra.code, extra.message, result.details].filter(Boolean).join(" · ");
+        console.error("[puente] setTrustline failed —", result);
+        setFailure(why || "Stellar rejected the trustline.");
         return;
       }
-      toast.success("Wallet activated", "It can hold USDC now.");
+      setFailure(null);
       await refreshBalance();
-    } catch {
-      toast.error("Couldn't activate the wallet", "Try again, or open Pollar's assets screen.");
+    } catch (e) {
+      console.error("[puente] setTrustline threw —", e);
+      setFailure("Pollar couldn't establish the trustline.");
     } finally {
       setWorking(false);
     }
-  };
+  }, [network, refreshBalance, setTrustline]);
+
+  // Once per session, and only for a wallet we know has no USDC trustline.
+  useEffect(() => {
+    if (mode !== "pollar" || canHoldUsdc !== false || attempted.current) return;
+    attempted.current = true;
+    void activate();
+  }, [mode, canHoldUsdc, activate]);
+
+  if (mode !== "pollar" || canHoldUsdc !== false) return null;
+
+  if (!failure) {
+    return (
+      <div className="flex items-center gap-3 bg-white rounded-2xl border border-surface-border shadow-sm px-6 py-4 mb-8">
+        <span className="w-4 h-4 border-2 border-pollar-blue/20 border-t-pollar-blue rounded-full animate-spin" />
+        <p className="text-sm text-muted">Setting your wallet up to hold USDC…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-warning/30 shadow-sm p-6 mb-8 flex items-start gap-4">
@@ -43,11 +71,11 @@ export function ActivateUsdc() {
         <FiAlertCircle size={20} />
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-extrabold text-foreground mb-1">Activate your wallet for USDC</h3>
-        <p className="text-sm text-muted mb-4">
-          Stellar wallets hold an asset only after they trust it. This is a one-time step, and until
-          it&apos;s done an agent can&apos;t send you USDC.
+        <h3 className="font-extrabold text-foreground mb-1">Your wallet can&apos;t hold USDC yet</h3>
+        <p className="text-sm text-muted mb-1">
+          Stellar wallets hold an asset only after they trust it, and setting that up didn&apos;t work.
         </p>
+        <p className="text-xs text-muted font-mono mb-4 break-words">{failure}</p>
         <div className="flex flex-wrap gap-3">
           <button
             onClick={activate}
@@ -55,7 +83,7 @@ export function ActivateUsdc() {
             className="flex items-center gap-2 px-5 py-2.5 bg-pollar-blue hover:bg-pollar-blue-hover disabled:opacity-60 text-white text-sm font-bold rounded-xl transition cursor-pointer"
           >
             <FiCheckCircle size={15} />
-            {working ? "Activating…" : "Activate for USDC"}
+            {working ? "Trying again…" : "Try again"}
           </button>
           <button
             onClick={openEnabledAssetsModal}
