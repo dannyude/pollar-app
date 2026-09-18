@@ -45,7 +45,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings().cors_origin_list,
     allow_methods=["GET", "POST"],
-    allow_headers=["Authorization", "Content-Type"],
+    # Idempotency-Key is a custom header, so the browser asks about it by name in the preflight.
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
 )
 install_error_handlers(app)
 for module in (account, agents, orders, proof):
