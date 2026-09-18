@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePollar } from "@pollar/react";
 import { useAuth } from "@/context/AuthContext";
@@ -18,6 +18,22 @@ export default function SendPage() {
   const [quote, setQuote] = useState<{ bob: number; rate: number } | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
+  // Which corridors Pollar's ramp actually covers for this app. Better to know
+  // here than to find out mid-demo that BOB isn't one of them.
+  const [corridors, setCorridors] = useState<{ code: string; currency: string | null }[] | null>(null);
+  const [corridorError, setCorridorError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode !== "pollar") return;
+    getClient()
+      .getRampCountries()
+      .then((res) => setCorridors(res.countries ?? []))
+      .catch((e: unknown) => {
+        const why = e instanceof Error ? e.message : "Pollar didn't answer.";
+        console.warn("[puente] getRampCountries failed —", e);
+        setCorridorError(why);
+      });
+  }, [mode, getClient]);
 
   const getQuote = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
@@ -106,6 +122,24 @@ export default function SendPage() {
           <h1 className="text-2xl font-extrabold text-foreground tracking-tight">Send USDC Globally</h1>
           <p className="text-sm text-muted">Zero network fees. Instant settlement via Stellar.</p>
         </div>
+      </div>
+
+      {/* What Pollar's ramp can actually pay out, for this app */}
+      <div className="p-4 bg-white rounded-2xl border border-surface-border shadow-sm mb-6 animate-fade-slide-up" style={{ animationDelay: "0.03s" }}>
+        <p className="text-xs font-bold text-muted uppercase tracking-wide mb-1.5">Pollar cash-out corridors</p>
+        {corridorError ? (
+          <p className="text-sm text-muted">Couldn&apos;t read them: <span className="font-mono text-xs">{corridorError}</span></p>
+        ) : corridors === null ? (
+          <p className="text-sm text-muted">Checking…</p>
+        ) : corridors.length === 0 ? (
+          <p className="text-sm text-muted">
+            None are enabled for this app yet, so the recipient can hold the USDC but can&apos;t convert it through Pollar.
+          </p>
+        ) : (
+          <p className="text-sm text-foreground">
+            {corridors.map((c) => `${c.code}${c.currency ? ` (${c.currency})` : ""}`).join(" · ")}
+          </p>
+        )}
       </div>
 
       {/* Balance */}
