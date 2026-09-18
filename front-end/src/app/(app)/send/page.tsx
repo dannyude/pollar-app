@@ -8,9 +8,15 @@ import { usdc } from "@/api/client";
 import { toast } from "@/hooks/useToast";
 import { FiCheckCircle, FiArrowRight, FiGlobe } from "react-icons/fi";
 
+/** Circle's USDC, the asset Pollar wallets hold. NEXT_PUBLIC_USDC_ISSUER overrides it for tests. */
+const CIRCLE_USDC = {
+  testnet: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+  mainnet: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+};
+
 export default function SendPage() {
   const { balance, mode } = useAuth();
-  const { runTx, getClient } = usePollar();
+  const { runTx, getClient, network } = usePollar();
   const [address, setAddress] = useState("");
   const [amount, setAmount] = useState("3.22");
   const [isQuoting, setIsQuoting] = useState(false);
@@ -54,7 +60,7 @@ export default function SendPage() {
       const result = await runTx("payment", {
         destination: address.trim(),
         amount,
-        asset: { type: "credit_alphanum4", code: "USDC", issuer: process.env.NEXT_PUBLIC_USDC_ISSUER! },
+        asset: { type: "credit_alphanum4", code: "USDC", issuer: process.env.NEXT_PUBLIC_USDC_ISSUER || CIRCLE_USDC[network] },
       });
       if (result.status === "error") {
         toast.error("Payment failed", "Stellar rejected it. Nothing was sent.");
