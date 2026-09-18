@@ -20,11 +20,15 @@ export interface AuthUser {
 
 type Mode = "pollar" | "dev" | "unconfigured";
 
+/** What a loading screen is actually waiting for, so it can say so. */
+export type Waiting = "starting" | "pollar-config" | "pollar-session" | "account" | null;
+
 interface AuthContextValue {
   user: AuthUser | null;
   /** USDC in the Pollar wallet, or null while unknown. */
   balance: string | null;
   isLoading: boolean;
+  waiting: Waiting;
   mode: Mode;
   login: () => void;
   logout: () => void;
@@ -128,6 +132,13 @@ function useProfile(signedIn: boolean | null) {
 function PollarAuthProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, openLoginModal, logout, getClient, walletBalance, refreshWalletBalance, configStatus } = usePollar();
   const [signedIn, setSignedIn] = useState(false);
+  // Pollar's app config only decides styling. Wait a few seconds for it, then
+  // carry on regardless — a stalled config call must not freeze the whole app.
+  const [configPatience, setConfigPatience] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setConfigPatience(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -149,7 +160,12 @@ function PollarAuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextValue = {
     user,
     balance: usdcBalance(walletBalance),
-    isLoading: configStatus === "loading" || isLoading || (isAuthenticated && !signedIn),
+    isLoading: (configStatus === "loading" && configPatience) || isLoading || (isAuthenticated && !signedIn),
+    waiting:
+      configStatus === "loading" && configPatience ? "pollar-config"
+      : isAuthenticated && !signedIn ? "pollar-session"
+      : isLoading ? "account"
+      : null,
     mode: "pollar",
     login: openLoginModal,
     logout: () => {
@@ -179,6 +195,7 @@ function DevAuthProvider({ children }: { children: React.ReactNode }) {
     user,
     balance: null,
     isLoading,
+    waiting: isLoading ? "account" : null,
     mode: "dev",
     login: () => {
       setDevAuthHeader(DEV_USER, DEV_WALLET!);
@@ -202,6 +219,7 @@ function UnconfiguredAuthProvider({ children }: { children: React.ReactNode }) {
     user: null,
     balance: null,
     isLoading: false,
+    waiting: null,
     mode: "unconfigured",
     login: () => alert("Set NEXT_PUBLIC_POLLAR_PUBLISHABLE_KEY in .env.local, then restart the dev server."),
     logout: () => {},
@@ -216,6 +234,7 @@ function StartingAuthProvider({ children }: { children: React.ReactNode }) {
     user: null,
     balance: null,
     isLoading: true,
+    waiting: "starting",
     mode: "pollar",
     login: () => {},
     logout: () => {},

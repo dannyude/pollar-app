@@ -5,6 +5,9 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/a
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
+  // A sleeping free-tier host can take ~50s to wake. Wait for that, but never
+  // hang forever: without a cap a stalled request leaves the UI spinning.
+  timeout: 60000,
 });
 
 /**

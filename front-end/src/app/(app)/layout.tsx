@@ -7,8 +7,23 @@ import Link from "next/link";
 import { FiLogOut } from "react-icons/fi";
 import { Sidebar, NAV } from "@/components/layout/Sidebar";
 
+const WAITING_ON: Record<string, string> = {
+  starting: "Starting Pollar…",
+  "pollar-config": "Loading Pollar…",
+  "pollar-session": "Checking your Pollar session…",
+  account: "Loading your account from the Puente API…",
+};
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, waiting, logout } = useAuth();
+  // If this takes long enough to worry about, say what it's waiting for and
+  // offer a way out, instead of spinning silently forever.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!isLoading) return setSlow(false);
+    const timer = setTimeout(() => setSlow(true), 12000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -33,10 +48,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-6">
+        <div className="flex flex-col items-center gap-4 text-center">
           <div className="w-12 h-12 border-4 border-pollar-blue/20 border-t-pollar-blue rounded-full animate-spin" />
-          <p className="text-sm text-muted font-medium">Loading your wallet...</p>
+          <p className="text-sm text-muted font-medium">
+            {(waiting && WAITING_ON[waiting]) ?? "Loading your wallet..."}
+          </p>
+          {slow && (
+            <div className="max-w-sm">
+              <p className="text-xs text-muted mb-3">
+                This is taking longer than it should. The API host sleeps when idle and can need a
+                minute to wake up.
+              </p>
+              <Link href="/login" className="text-xs font-bold text-pollar-blue hover:underline">
+                Sign in again
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     );
