@@ -74,7 +74,11 @@ function useProfile(signedIn: boolean | null) {
   const refresh = useCallback(async () => {
     if (signedIn === null) return;
     if (!signedIn) {
+      // Definitely signed out (not merely "not known yet"): drop the cookie, or
+      // middleware will keep redirecting /login back into the app and the user
+      // is stuck on a loading screen with no way to sign in again.
       setUser(null);
+      clearCookie(AUTH_COOKIE);
       setIsLoading(false);
       return;
     }
@@ -131,7 +135,7 @@ function useProfile(signedIn: boolean | null) {
 /** Real sign-in: Pollar owns the session, the wallet and the balance. */
 function PollarAuthProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, openLoginModal, logout, getClient, walletBalance, refreshWalletBalance, configStatus } = usePollar();
-  const [signedIn, setSignedIn] = useState(false);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null); // null: Pollar hasn't said yet
   // Pollar's app config only decides styling. Wait a few seconds for it, then
   // carry on regardless — a stalled config call must not freeze the whole app.
   const [configPatience, setConfigPatience] = useState(true);
@@ -143,8 +147,10 @@ function PollarAuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isAuthenticated) {
       clearAuthHeader();
-      setSignedIn(false);
-      return;
+      // A stored session is restored asynchronously; give it a moment before
+      // calling the user signed out, which clears their cookie.
+      const timer = setTimeout(() => setSignedIn(false), 1500);
+      return () => clearTimeout(timer);
     }
     // Read the token per request: the SDK rotates it while the app is open.
     setSessionTokenSource(() => {
@@ -160,10 +166,10 @@ function PollarAuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextValue = {
     user,
     balance: usdcBalance(walletBalance),
-    isLoading: (configStatus === "loading" && configPatience) || isLoading || (isAuthenticated && !signedIn),
+    isLoading: (configStatus === "loading" && configPatience) || isLoading || signedIn === null,
     waiting:
       configStatus === "loading" && configPatience ? "pollar-config"
-      : isAuthenticated && !signedIn ? "pollar-session"
+      : signedIn !== true ? "pollar-session"
       : isLoading ? "account"
       : null,
     mode: "pollar",

@@ -19,13 +19,11 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // Redirect logged-in users away from login page
-  if (pathname === "/login") {
-    const session = request.cookies.get("puente_session");
-    if (session) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
-  }
+  // Deliberately no redirect away from /login when the cookie is present. The
+  // cookie is only a hint — the real session lives in Pollar, in the browser —
+  // and bouncing /login back into the app traps anyone whose session has gone
+  // on a loading screen they can't leave. The login page itself redirects once
+  // it actually has a user.
 
   return NextResponse.next();
 }
