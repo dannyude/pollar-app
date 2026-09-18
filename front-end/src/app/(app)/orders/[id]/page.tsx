@@ -276,9 +276,24 @@ export default function OrderPage() {
           </button>
         )}
 
-        {order.actions.length === 0 && !done && (
+        {order.status === "disputed" ? (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <FiAlertTriangle size={16} className="text-danger" />
+              <p className="font-extrabold text-danger">This order is disputed</p>
+            </div>
+            {order.disputeReason && (
+              <p className="text-sm text-foreground mb-3">&ldquo;{order.disputeReason}&rdquo;</p>
+            )}
+            <p className="text-sm text-muted">
+              Nothing moves while it&apos;s open: the {order.type === "cash_in" ? "agent's float stays reserved" : "USDC stays in escrow"}, and
+              the timer that would otherwise complete the order is stopped. Puente reviews the transfer evidence
+              against what&apos;s on Stellar and settles it with both of you.
+            </p>
+          </div>
+        ) : order.actions.length === 0 && !done ? (
           <p className="text-sm text-muted text-center py-4">Waiting on the other side. This page updates itself.</p>
-        )}
+        ) : null}
       </div>
 
       {/* ── On-chain proof ──────────────────────────────────── */}
